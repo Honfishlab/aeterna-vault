@@ -1,0 +1,6 @@
+{
+  "name": "Aeterna Vault",
+  "description": "AI-first digital sanctuary on the permaweb for preserving memories, memorials, and permanent family legacies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
