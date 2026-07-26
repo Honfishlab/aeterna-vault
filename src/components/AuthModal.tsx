@@ -67,116 +67,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleEmailSignIn = (e: React.FormEvent) => {
+  const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-
-    if (!email) {
-      setAuthError('Please enter a valid email address.');
+    if (!email || !passcode || (authType === "signup" && !signUpName.trim())) {
+      setAuthError("Please complete all required account fields.");
       return;
     }
-    if (!passcode) {
-      setAuthError('Please enter your vault master passcode.');
+    if (passcode.length < 12) {
+      setAuthError("Your vault password must be at least 12 characters.");
       return;
     }
-
     setIsAuthenticating(true);
-    setTimeout(() => {
-      const usernameRaw = email.split('@')[0] || 'User';
-      const formattedName = usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1);
-
-      const newUser: UserProfile = {
-        id: 'usr_' + Math.random().toString(36).substring(2, 9),
-        name: formattedName,
-        email: email,
-        role: role,
-        authMethod: 'Email & Passcode',
-        walletAddress: '0x71C92a4f9a72b0c3d4E691',
-        signedInAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        securityLevel: 'Quantum-Proof AES-GCM'
-      };
-
-      if (authType === 'signup' && startCleanVault && onClearDemoContent) {
-        onClearDemoContent();
-      }
-
-      setIsAuthenticating(false);
-      onSignIn(newUser);
+    try {
+      const response = await fetch(authType === "signup" ? "/api/auth/register" : "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: signUpName.trim(), email, password: passcode, role }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.user) throw new Error(result.error || "Authentication failed.");
+      if (authType === "signup" && startCleanVault && onClearDemoContent) onClearDemoContent();
+      onSignIn(result.user);
       onClose();
-    }, 800);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setIsAuthenticating(false);
+    }
   };
 
   const handleWeb3SignIn = () => {
-    setIsAuthenticating(true);
-    setAuthError(null);
-
-    setTimeout(() => {
-      const newUser: UserProfile = {
-        id: 'usr_arconnect_' + Math.random().toString(36).substring(2, 7),
-        name: 'ArConnect Sovereign User',
-        email: 'wallet-0x71c9@arweave.net',
-        role: 'Vault Owner',
-        authMethod: 'ArConnect / Web3',
-        walletAddress: '0x71C92a4f9a72b0c3d4E691',
-        signedInAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        securityLevel: 'Hardware Enclave'
-      };
-      setIsAuthenticating(false);
-      onSignIn(newUser);
-      onClose();
-    }, 1000);
+    setAuthError("Web3 sign-in is not enabled yet. Use email and password for a verified account.");
   };
-
   const handleJwkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setJwkFileName(file.name);
-      setIsAuthenticating(true);
-      setAuthError(null);
-
-      setTimeout(() => {
-        const newUser: UserProfile = {
-          id: 'usr_jwk_' + Math.random().toString(36).substring(2, 7),
-          name: 'JWK Sovereign Keyholder',
-          email: 'keyfile-rsa4096@aeterna.vault',
-          role: 'Vault Owner',
-          authMethod: 'JWK Keyfile',
-          walletAddress: 'ar_jwk_4096_71c9a8',
-          signedInAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          securityLevel: 'Quantum-Proof AES-GCM'
-        };
-        setIsAuthenticating(false);
-        onSignIn(newUser);
-        onClose();
-      }, 900);
-    }
+    const file = e.target.files?.[0];
+    if (file) setJwkFileName(file.name);
+    setAuthError("JWK account authentication is not enabled yet. The key file was not uploaded.");
+    e.target.value = "";
   };
-
   const handleHeirAccessSignIn = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!heirAccessCode) {
-      setAuthError('Please enter your Heir Emergency Access Token.');
-      return;
-    }
-
-    setIsAuthenticating(true);
-    setAuthError(null);
-
-    setTimeout(() => {
-      const newUser: UserProfile = {
-        id: 'usr_heir_' + Math.random().toString(36).substring(2, 7),
-        name: 'Designated Heir / Trustee',
-        email: 'trustee-verified@aeterna.vault',
-        role: 'Heir / Beneficiary',
-        authMethod: 'Heir Key Code',
-        walletAddress: '0xHeir8921a0C',
-        signedInAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        securityLevel: 'Standard Biometric'
-      };
-      setIsAuthenticating(false);
-      onSignIn(newUser);
-      onClose();
-    }, 1000);
+    setAuthError("Heir-token authentication is not enabled yet. Use a registered email account.");
   };
 
   return (
@@ -315,7 +247,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <button
-              onClick={() => {
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => undefined);
                 onSignOut();
                 onClose();
               }}
@@ -378,6 +311,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* TAB 1: Email & Passcode Form */}
             {activeTab === 'email' && (
               <form onSubmit={handleEmailSignIn} className="space-y-4 text-xs">
+                {authType === "signup" && (
+                  <div>
+                    <label className="block font-semibold text-[#FFF2A8] mb-1">Your Name</label>
+                    <input type="text" value={signUpName} onChange={(e) => setSignUpName(e.target.value)} maxLength={100} className="w-full px-3 py-2.5 bg-[#120B21] border border-[#DFB260]/40 rounded-xl text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" required />
+                  </div>
+                )}
                 <div>
                   <label className="block font-semibold text-[#FFF2A8] mb-1">
                     Vault Email Address
@@ -405,7 +344,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="password"
                       value={passcode}
                       onChange={(e) => setPasscode(e.target.value)}
-                      placeholder="Enter 8+ char vault passcode"
+                      placeholder="Enter 12+ character vault password"
                       className="w-full pl-9 pr-3 py-2.5 bg-[#120B21] border border-[#DFB260]/40 rounded-xl text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium"
                       required
                     />

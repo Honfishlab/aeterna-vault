@@ -1,3 +1,6 @@
+import { databaseConfigured, databaseError, execute, query } from "../../../server/db";
+import { authenticatedUser, createSession, destroySession, hashPassword, normalizeEmail, toAuthUser, validEmail, validPassword, verifyPassword } from "../../../server/auth";
+
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 const securityHeaders = {
@@ -8,6 +11,15 @@ const securityHeaders = {
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: securityHeaders });
+}
+
+function jsonWithCookie(data: unknown, cookie: string, status = 200) {
+  return Response.json(data, { status, headers: { ...securityHeaders, "Set-Cookie": cookie } });
+}
+
+function sameOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
 }
 
 function routeName(request: Request) {
@@ -84,8 +96,24 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   const route = routeName(request);
 
+  if (route === "auth/me") {
+    if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
+    try { return json({ user: await authenticatedUser(request) }); }
+    catch (error) { return json(databaseError(error), 503); }
+  }
+
+  if (route === "vault/data") {
+    if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const rows = await query<{ data: unknown; revision: number }>("SELECT data, revision FROM vault_snapshots WHERE user_id = $1", [user.id]);
+      return json({ data: rows[0]?.data ?? null, revision: Number(rows[0]?.revision || 0) });
+    } catch (error) { return json(databaseError(error), 503); }
+  }
+
   if (route === 'health') {
-    return json({ ok: true, service: 'aeterna-vault', storage: 'local-first', aiConfigured: Boolean(gemini()) });
+    return json({ ok: true, service: 'aeterna-vault', storage: databaseConfigured() ? 'postgresql' : 'local-fallback', databaseConfigured: databaseConfigured(), aiConfigured: Boolean(gemini()) });
   }
 
   if (route === 'arweave/status' || route === 'arweave/wallet-info') {
@@ -122,6 +150,59 @@ export async function POST(request: Request) {
     body = await requestBody(request);
   } catch (error: any) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
+  }
+
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "auth/register") {
+    if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
+    const email = normalizeEmail(String(body.email || ""));
+    const password = String(body.password || "");
+    const name = String(body.name || "").trim().slice(0, 100);
+    const allowedRoles = ["Vault Owner", "Trustee", "Heir / Beneficiary"];
+    const role = allowedRoles.includes(body.role) ? body.role : "Vault Owner";
+    if (!name || !validEmail(email) || !validPassword(password)) return json({ error: "Name, a valid email, and a password of at least 12 characters are required." }, 400);
+    try {
+      const existing = await query("SELECT id FROM users WHERE email = $1 LIMIT 1", [email]);
+      if (existing.length) return json({ error: "An account with this email already exists." }, 409);
+      const id = crypto.randomUUID();
+      await execute("INSERT INTO users (id, email, name, password_hash, role) VALUES ($1, $2, $3, $4, $5)", [id, email, name, await hashPassword(password), role]);
+      await execute("INSERT INTO vault_snapshots (user_id, data) VALUES ($1, $2::jsonb)", [id, JSON.stringify({ memories: [], letters: [], memorials: [], heirs: [] })]);
+      await execute("INSERT INTO audit_events (user_id, event_type, entity_type, entity_id) VALUES ($1, $2, $3, $1)", [id, "account.registered", "user"]);
+      const session = await createSession(id, request);
+      return jsonWithCookie({ user: toAuthUser({ id, email, name, role }) }, session.cookie, 201);
+    } catch (error) { return json(databaseError(error), 503); }
+  }
+
+  if (route === "auth/login") {
+    if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
+    const email = normalizeEmail(String(body.email || ""));
+    const password = String(body.password || "");
+    try {
+      const rows = await query<{ id: string; name: string; email: string; role: any; password_hash: string }>("SELECT id, name, email, role, password_hash FROM users WHERE email = $1 AND status = $2 LIMIT 1", [email, "active"]);
+      const account = rows[0];
+      if (!account || !(await verifyPassword(password, account.password_hash))) return json({ error: "Invalid email or password." }, 401);
+      const session = await createSession(account.id, request);
+      await execute("INSERT INTO audit_events (user_id, event_type) VALUES ($1, $2)", [account.id, "session.login"]);
+      return jsonWithCookie({ user: toAuthUser(account) }, session.cookie);
+    } catch (error) { return json(databaseError(error), 503); }
+  }
+
+  if (route === "auth/logout") {
+    if (!databaseConfigured()) return jsonWithCookie({ success: true }, "aeterna_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+    try { return jsonWithCookie({ success: true }, await destroySession(request)); }
+    catch (error) { return json(databaseError(error), 503); }
+  }
+
+  if (route === "vault/sync") {
+    if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const data = { memories: Array.isArray(body.memories) ? body.memories : [], letters: Array.isArray(body.letters) ? body.letters : [], memorials: Array.isArray(body.memorials) ? body.memorials : [], heirs: Array.isArray(body.heirs) ? body.heirs : [] };
+      const rows = await query<{ revision: number }>("INSERT INTO vault_snapshots (user_id, data) VALUES ($1, $2::jsonb) ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, revision = vault_snapshots.revision + 1, updated_at = NOW() RETURNING revision", [user.id, JSON.stringify(data)]);
+      return json({ success: true, revision: Number(rows[0]?.revision || 1) });
+    } catch (error) { return json(databaseError(error), 503); }
   }
 
   if (route === 'arweave/import-jwk') {
@@ -252,10 +333,6 @@ export async function POST(request: Request) {
     } catch {
       return json({ error: 'Audio transcription failed.' }, 502);
     }
-  }
-
-  if (route.startsWith('vault/')) {
-    return json({ success: true, localOnly: true, message: 'Vault contents are stored only in this browser.' });
   }
 
   return json({ error: 'API route not found' }, 404);

@@ -38,6 +38,18 @@ export default function App() {
     return null;
   });
 
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(async response => response.ok ? response.json() : null)
+      .then(result => {
+        if (!result) return;
+        setCurrentUser(result.user || null);
+        if (result.user) localStorage.setItem("aeterna_user_profile", JSON.stringify(result.user));
+        else localStorage.removeItem("aeterna_user_profile");
+      })
+      .catch(() => undefined);
+  }, []);
+
   // App State collections initialized with persistent localStorage support
   const [memories, setMemories] = useState<MemoryItem[]>(() => {
     if (typeof window === 'undefined') return INITIAL_MEMORIES;
@@ -95,7 +107,7 @@ export default function App() {
 
   const [triggerConfig, setTriggerConfig] = useState<InheritanceTriggerConfig>(INITIAL_TRIGGER_CONFIG);
 
-  // Hydrate the local-first vault from IndexedDB. Vault contents never enter a shared server-side store.
+  // Prefer the authenticated server vault, with IndexedDB as an offline fallback.
   useEffect(() => {
     async function hydrateFromVault() {
       const isDemoCleared = localStorage.getItem('aeterna_demo_cleared') === 'true';
@@ -109,6 +121,7 @@ export default function App() {
             if (Array.isArray(body.data.memories)) setMemories(body.data.memories);
             if (Array.isArray(body.data.letters)) setLetters(body.data.letters);
             if (Array.isArray(body.data.heirs)) setHeirs(body.data.heirs);
+            if (Array.isArray(body.data.memorials)) setMemorials(body.data.memorials);
             return;
           }
         }
@@ -142,10 +155,11 @@ export default function App() {
       }
     }
     hydrateFromVault();
-  }, []);
+  }, [currentUser?.id]);
 
-  // Sync state to server whenever vault items are updated
+  // Sync authenticated vault state to server whenever vault items are updated
   useEffect(() => {
+    if (!currentUser) return;
     const timer = setTimeout(() => {
       fetch('/api/vault/sync', {
         method: 'POST',
@@ -154,7 +168,7 @@ export default function App() {
       }).catch(err => console.warn('Vault server sync notice:', err));
     }, 1000);
     return () => clearTimeout(timer);
-  }, [memories, letters, heirs, memorials]);
+  }, [memories, letters, heirs, memorials, currentUser?.id]);
 
   // Clear demo content handler
   const handleClearDemoContent = () => {
