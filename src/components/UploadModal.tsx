@@ -464,7 +464,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         if (selectedFile) {
           setArchiveStatusText('Uploading original media to private Cloudflare R2 storage...');
           const stored = await uploadMediaFile(selectedFile, progress => setArchiveProgress(5 + Math.round(progress * 0.25)));
-          storedMediaUrl = stored.mediaUrl;
+          storedMediaUrl = stored?.mediaUrl || null;
         }
         setArchiveStatusText('Encrypting single memory payload...');
         let fileBuffer: ArrayBuffer;
@@ -577,7 +577,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           if (item.file) {
             setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
             const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)));
-            storedMediaUrl = stored.mediaUrl;
+            storedMediaUrl = stored?.mediaUrl || item.previewUrl;
           }
 
           if (item.file) {
