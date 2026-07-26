@@ -1,18 +1,23 @@
-[
-  {
-    "AllowedOrigins": [
-      "https://aeterna-vault-zawj.onrender.com",
-      "http://localhost:3000"
-    ],
-    "AllowedMethods": [
-      "PUT"
-    ],
-    "AllowedHeaders": [
-      "Content-Type"
-    ],
-    "ExposeHeaders": [
-      "ETag"
-    ],
-    "MaxAgeSeconds": 3600
-  }
-]
+{
+  "rules": [
+    {
+      "id": "aeterna-vault-browser-uploads",
+      "allowed": {
+        "origins": [
+          "https://aeterna-vault-zawj.onrender.com",
+          "http://localhost:3000"
+        ],
+        "methods": [
+          "PUT"
+        ],
+        "headers": [
+          "content-type"
+        ]
+      },
+      "exposeHeaders": [
+        "etag"
+      ],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}
