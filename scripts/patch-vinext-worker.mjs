@@ -22,4 +22,21 @@ function visit(directory) {
 
 visit(root);
 if (patched === 0) throw new Error('No Vinext worker files required compatibility patching.');
-console.log("Patched " + patched + " Vinext worker files.");
+const entry = path.join(root, 'index.js');
+const handler = path.join(root, 'vinext-handler.js');
+fs.renameSync(entry, handler);
+fs.writeFileSync(
+  entry,
+  [
+    "import handleRequest from './vinext-handler.js';",
+    '',
+    'export default {',
+    '  fetch(request, env, context) {',
+    '    return handleRequest(request, env, context);',
+    '  },',
+    '};',
+    '',
+  ].join('\n'),
+);
+
+console.log("Patched " + patched + " Vinext worker files and installed the Worker fetch entrypoint.");
