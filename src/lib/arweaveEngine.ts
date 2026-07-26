@@ -157,11 +157,13 @@ export async function createPermawebTransaction(params: {
   let txId = generateArweaveTxId();
   let status: 'PENDING' | 'SEALED_ON_CHAIN' | 'CONFIRMED' = 'SEALED_ON_CHAIN';
   let reward = (sizeBytes * 0.00000021).toFixed(6);
+  let owner = params.ownerAddress || 'Wallet not connected';
+
+  const sessionJwk = typeof window !== 'undefined'
+    ? sessionStorage.getItem('aeterna_arweave_jwk')
+    : null;
 
   try {
-    const sessionJwk = typeof window !== 'undefined'
-      ? sessionStorage.getItem('aeterna_arweave_jwk')
-      : null;
     const res = await fetch('/api/arweave/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -172,8 +174,7 @@ export async function createPermawebTransaction(params: {
         encryptionLevel: params.encryptionLevel,
         dataHash,
         payloadBase64,
-        sizeBytes,
-        jwk: sessionJwk || undefined
+        sizeBytes
       })
     });
 
@@ -208,10 +209,36 @@ export async function createPermawebTransaction(params: {
     { name: 'Permaweb-Gateway', value: 'arweave.net' }
   ];
 
+  if (sessionJwk) {
+    try {
+      const { default: Arweave } = await import('arweave');
+      const client = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
+      const jwk = JSON.parse(sessionJwk);
+      const data = typeof params.data === 'string'
+        ? new TextEncoder().encode(params.data)
+        : new Uint8Array(params.data);
+      const transaction = await client.createTransaction({ data }, jwk);
+      for (const tag of tags) transaction.addTag(tag.name, tag.value);
+      await client.transactions.sign(transaction, jwk);
+      const posted = await client.transactions.post(transaction);
+      if (posted.status === 200 || posted.status === 202) {
+        txId = transaction.id;
+        reward = client.ar.winstonToAr(transaction.reward);
+        owner = await client.wallets.jwkToAddress(jwk);
+        status = 'SEALED_ON_CHAIN';
+      } else {
+        status = 'PENDING';
+      }
+    } catch (error) {
+      status = 'PENDING';
+      console.error('Client-side Arweave signing failed:', error);
+    }
+  }
+
   return {
     id: txId,
     dataHash,
-    owner: params.ownerAddress || '0x71C92a4f9a72b0c3d4E691',
+    owner,
     target: 'Arweave-Permaweb-Storage-Pool',
     quantity: '0',
     reward,

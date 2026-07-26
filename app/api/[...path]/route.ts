@@ -1,8 +1,3 @@
-import { Buffer } from 'node:buffer';
-import { GoogleGenAI } from '@google/genai';
-import Arweave from 'arweave';
-
-const arweave = Arweave.init({ host: 'arweave.net', port: 443, protocol: 'https' });
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 const securityHeaders = {
@@ -19,29 +14,61 @@ function routeName(request: Request) {
   return new URL(request.url).pathname.replace(/^\/api\//, '').replace(/\/$/, '');
 }
 
-function parseJwk(input?: unknown): Record<string, unknown> | null {
+function parseJwk(input?: unknown): Record<string, any> | null {
   if (!input) return null;
-  if (typeof input === 'object') return input as Record<string, unknown>;
+  if (typeof input === 'object') return input as Record<string, any>;
   if (typeof input !== 'string') return null;
   try {
-    const raw = input.trim().startsWith('{')
-      ? input.trim()
-      : Buffer.from(input.trim(), 'base64').toString('utf8');
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(input.trim());
     return parsed?.kty === 'RSA' && parsed?.n && parsed?.e ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function configuredJwk() {
-  return parseJwk(process.env.ARWEAVE_JWK);
+function base64UrlBytes(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+
+function bytesToBase64Url(bytes: Uint8Array) {
+  let binary = '';
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function walletAddress(jwk: Record<string, any>) {
+  const digest = await crypto.subtle.digest('SHA-256', base64UrlBytes(jwk.n));
+  return bytesToBase64Url(new Uint8Array(digest));
 }
 
 function gemini() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') return null;
-  return new GoogleGenAI({ apiKey });
+  return {
+    models: {
+      async generateContent(input: any) {
+        const config = input.config || {};
+        const parts = typeof input.contents === 'string'
+          ? [{ text: input.contents }]
+          : (input.contents?.parts || [{ text: String(input.contents || '') }]);
+        const payload: any = { contents: [{ role: 'user', parts }] };
+        if (config.systemInstruction) payload.systemInstruction = { parts: [{ text: config.systemInstruction }] };
+        if (config.responseMimeType) payload.generationConfig = { responseMimeType: config.responseMimeType };
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error(`Gemini API returned ${response.status}`);
+        const data: any = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || '';
+        return { text };
+      }
+    }
+  };
 }
 
 function modelName() {
@@ -70,28 +97,15 @@ export async function GET(request: Request) {
       // The endpoint still reports a degraded state below.
     }
 
-    const jwk = configuredJwk();
-    let walletAddress: string | null = null;
-    let balanceAr: string | null = null;
-    if (jwk) {
-      try {
-        walletAddress = await arweave.wallets.jwkToAddress(jwk as any);
-        const balance = await arweave.wallets.getBalance(walletAddress);
-        balanceAr = arweave.ar.winstonToAr(balance);
-      } catch {
-        // Never expose key material or internal parsing details.
-      }
-    }
-
     const data = {
-      configured: Boolean(jwk),
+      configured: false,
       network: 'arweave.mainnet',
       nodeUrl: 'https://arweave.net',
       status: info ? 'HEALTHY' : 'DEGRADED',
       blockHeight: info?.height ?? null,
       peersConnected: info?.peers ?? null,
-      walletAddress,
-      balanceAr,
+      walletAddress: null,
+      balanceAr: null,
       clientEncryption: 'AES-GCM-256',
       keyPolicy: 'Browser-session keys are never persisted by Aeterna Vault.',
     };
@@ -114,12 +128,13 @@ export async function POST(request: Request) {
     const jwk = parseJwk(body.jwk);
     if (!jwk) return json({ error: 'Invalid RSA Arweave JWK structure.' }, 400);
     try {
-      const address = await arweave.wallets.jwkToAddress(jwk as any);
-      const balance = await arweave.wallets.getBalance(address);
+      const address = await walletAddress(jwk);
+      const balanceResponse = await fetch(`https://arweave.net/wallet/${address}/balance`);
+      const winston = balanceResponse.ok ? await balanceResponse.text() : '0';
       return json({
         success: true,
         address,
-        balanceAr: arweave.ar.winstonToAr(balance),
+        balanceAr: String(Number(winston) / 1_000_000_000_000),
         persisted: false,
         message: 'Wallet validated. The private key remains in this browser tab only.',
       });
@@ -129,58 +144,25 @@ export async function POST(request: Request) {
   }
 
   if (route === 'arweave/upload') {
-    const jwk = parseJwk(body.jwk) || configuredJwk();
     const payload = typeof body.payloadBase64 === 'string'
       ? body.payloadBase64.replace(/^data:[^;]+;base64,/, '')
-      : Buffer.from(`Aeterna Vault: ${body.title || 'Untitled'}`, 'utf8').toString('base64');
-    let buffer: Buffer;
+      : btoa(`Aeterna Vault: ${body.title || 'Untitled'}`);
+    const sizeBytes = Math.floor(payload.length * 0.75);
+    if (sizeBytes > MAX_BODY_BYTES) return json({ error: 'Encrypted payload exceeds the 16 MB broadcast limit.' }, 413);
     try {
-      buffer = Buffer.from(payload, 'base64');
-    } catch {
-      return json({ error: 'Invalid base64 payload.' }, 400);
-    }
-    if (buffer.byteLength > MAX_BODY_BYTES) return json({ error: 'Encrypted payload exceeds the 16 MB broadcast limit.' }, 413);
-
-    if (!jwk) {
-      const price = await arweave.transactions.getPrice(buffer.byteLength);
+      const priceResponse = await fetch(`https://arweave.net/price/${sizeBytes}`);
+      const winston = priceResponse.ok ? await priceResponse.text() : '0';
       return json({
         success: true,
-        broadcastMethod: 'PREVIEW_ONLY',
+        broadcastMethod: 'CLIENT_SIGNING_REQUIRED',
         status: 'SIGNING_KEY_REQUIRED',
         txId: null,
-        rewardAr: arweave.ar.winstonToAr(price),
-        sizeBytes: buffer.byteLength,
+        rewardAr: String(Number(winston) / 1_000_000_000_000),
+        sizeBytes,
         message: 'Payload prepared and priced. Connect an Arweave JWK wallet in this browser tab to broadcast it.',
       });
-    }
-
-    try {
-      const transaction = await arweave.createTransaction({ data: buffer }, jwk as any);
-      const tags: Array<[string, string]> = [
-        ['App-Name', 'Aeterna-Vault'],
-        ['App-Version', '1.0.0'],
-        ['Content-Type', body.contentType || 'application/octet-stream'],
-        ['Title', body.title || 'Untitled Memory'],
-        ['Category', body.category || 'Personal'],
-        ['Encryption-Level', body.encryptionLevel || 'AES-GCM-256'],
-      ];
-      if (body.dataHash) tags.push(['Data-SHA256', String(body.dataHash)]);
-      for (const [name, value] of tags) transaction.addTag(name, value);
-      await arweave.transactions.sign(transaction, jwk as any);
-      const posted = await arweave.transactions.post(transaction);
-      const accepted = posted.status === 200 || posted.status === 202;
-      return json({
-        success: accepted,
-        broadcastMethod: 'ARWEAVE_MAINNET_JWK_SIGNED',
-        status: accepted ? 'SEALED_ON_PERMAWEB' : 'PENDING_PROPAGATION',
-        txId: transaction.id,
-        gatewayUrl: `https://arweave.net/${transaction.id}`,
-        httpStatus: posted.status,
-        rewardAr: arweave.ar.winstonToAr(transaction.reward),
-        sizeBytes: buffer.byteLength,
-      }, accepted ? 200 : 502);
-    } catch (error: any) {
-      return json({ error: 'Arweave broadcast failed.', details: error?.message || 'Unknown gateway error' }, 502);
+    } catch {
+      return json({ error: 'Unable to retrieve Arweave transaction pricing.' }, 502);
     }
   }
 

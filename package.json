@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json",
+    "build": "vinext build && node scripts/patch-vinext-worker.mjs && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json",
     "start": "vinext start",
     "clean": "rm -rf dist .vinext .vite",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@mdx-js/rollup": "^3.1.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/d3": "^7.4.3",
@@ -25,7 +24,8 @@
     "react-dom": "^19.2.8",
     "react-server-dom-webpack": "^19.2.8",
     "recharts": "^3.10.1",
-    "vinext": "^1.0.0-beta.4"
+    "vinext": "^0.2.1",
+    "vite-tsconfig-paths": "^6.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
