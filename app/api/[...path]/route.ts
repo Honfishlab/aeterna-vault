@@ -112,8 +112,14 @@ export async function GET(request: Request) {
     } catch (error) { return json(databaseError(error), 503); }
   }
 
-  if (route === 'health') {
-    return json({ ok: true, service: 'aeterna-vault', storage: databaseConfigured() ? 'postgresql' : 'local-fallback', databaseConfigured: databaseConfigured(), aiConfigured: Boolean(gemini()) });
+  if (route === "health") {
+    if (!databaseConfigured()) return json({ ok: true, service: "aeterna-vault", storage: "local-fallback", databaseConfigured: false, databaseConnected: false, aiConfigured: Boolean(gemini()) });
+    try {
+      await query("SELECT 1 AS connected");
+      return json({ ok: true, service: "aeterna-vault", storage: "postgresql", databaseConfigured: true, databaseConnected: true, aiConfigured: Boolean(gemini()) });
+    } catch (error) {
+      return json({ ok: false, service: "aeterna-vault", databaseConfigured: true, databaseConnected: false, ...databaseError(error) }, 503);
+    }
   }
 
   if (route === 'arweave/status' || route === 'arweave/wallet-info') {
