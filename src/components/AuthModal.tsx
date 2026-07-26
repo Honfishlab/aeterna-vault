@@ -375,7 +375,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span>Authenticating Quantum Key...</span>
                   ) : (
                     <span className="flex items-center justify-center space-x-2">
-                      <span>Sign In & Unlock Vault</span>
+                      <span>{authType === "signup" ? "Create Vault Account" : "Sign In & Unlock Vault"}</span>
                       <ArrowRight className="w-4 h-4" />
                     </span>
                   )}

@@ -19,7 +19,16 @@ function jsonWithCookie(data: unknown, cookie: string, status = 200) {
 
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  try {
+    const originUrl = new URL(origin);
+    const requestUrl = new URL(request.url);
+    const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || requestUrl.host;
+    const forwardedProto = request.headers.get("x-forwarded-proto") || requestUrl.protocol.replace(":", "");
+    return originUrl.host === forwardedHost && originUrl.protocol === forwardedProto + ":";
+  } catch {
+    return false;
+  }
 }
 
 function routeName(request: Request) {
