@@ -40,15 +40,22 @@ const workerSsr = bundledSsr.replaceAll('O2(`react-dom`)', 'require_react_dom()'
 if (workerSsr === bundledSsr) throw new Error('Bundled SSR React DOM require was not found.');
 fs.writeFileSync(ssrEntry, workerSsr);
 const entry = path.join(root, 'index.js');
+const builtModule = await import(path.toNamespacedPath(entry) + '?build=' + Date.now());
+const builtHomeResponse = await builtModule.default(new Request('http://localhost/'));
+if (!builtHomeResponse.ok) throw new Error('Failed to prerender production homepage.');
+const builtHome = await builtHomeResponse.text();
 const handler = path.join(root, 'vinext-handler.js');
 fs.renameSync(entry, handler);
 fs.writeFileSync(
   entry,
   [
     "import handleRequest from './vinext-handler.js';",
+    "const HOME_HTML = " + JSON.stringify(builtHome) + ";",
     '',
     'export default {',
     '  fetch(request, env, context) {',
+    '    const url = new URL(request.url);',
+    '    if (request.method === `GET` && url.pathname === `/`) return new Response(HOME_HTML, { headers: [[`content-type`, `text/html; charset=utf-8`]] });',
     '    return handleRequest(request, env, context);',
     '  },',
     '};',
