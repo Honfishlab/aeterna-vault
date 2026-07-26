@@ -16,10 +16,6 @@ services:
         fromDatabase:
           name: aeterna-vault-db
           property: connectionString
-      - key: GEMINI_MODEL
-        value: gemini-3.6-flash
-      - key: GEMINI_API_KEY
-        sync: false
 
 databases:
   - name: aeterna-vault-db
