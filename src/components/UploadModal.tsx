@@ -8,6 +8,7 @@ import {
 import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
+import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
 import { 
   Upload, 
   X, 
@@ -36,7 +37,8 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Volume2
+  Volume2,
+  Cloud
 } from 'lucide-react';
 
 interface UploadModalProps {
@@ -52,6 +54,8 @@ export interface AlbumFileItem {
   previewUrl: string;
   name: string;
   size: number;
+  mimeType?: string;
+  storedMediaUrl?: string;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -62,6 +66,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 }) => {
   // Upload mode: 'single' or 'album'
   const [uploadMode, setUploadMode] = useState<'single' | 'album'>('single');
+  const [cloudImportOpen, setCloudImportOpen] = useState(false);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -312,7 +317,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         size: 1520000 // default estimated size
       }
     ]);
-    setPastedUrlInput('');
+    setPastedUrlInput("");
+  };
+
+  const handleCloudImported = (items: ImportedCloudMedia[]) => {
+    if (!items.length) return;
+    setUploadMode('album');
+    if (!title) setTitle(items.length === 1 ? (items[0].name.split(".").slice(0, -1).join(".") || items[0].name) : "Imported Google Drive Album");
+    setAlbumFiles(previous => [...previous, ...items.map(item => ({
+      id: "google-" + item.id,
+      previewUrl: item.mediaUrl,
+      storedMediaUrl: item.mediaUrl,
+      mimeType: item.mimeType,
+      name: item.name,
+      size: item.size,
+    }))]);
   };
 
   const handleRemoveAlbumFile = (id: string) => {
@@ -572,8 +591,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           setArchiveStatusText(`Encrypting album item ${idx + 1} of ${totalItems}: ${item.name}...`);
 
           let fileBuffer: ArrayBuffer;
-          let contentType = item.file ? item.file.type : 'image/jpeg';
-          let storedMediaUrl = item.previewUrl;
+          let contentType = item.file ? item.file.type : (item.mimeType || 'image/jpeg');
+          let storedMediaUrl = item.storedMediaUrl || item.previewUrl;
           if (item.file) {
             setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
             const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)));
@@ -632,9 +651,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             date: formattedDateString,
             time: time || undefined,
             location: location || 'Sovereign Album Node',
-            imageUrl: item.file && !item.file.type.startsWith('image/') ? 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800' : storedMediaUrl,
-            videoUrl: item.file?.type.startsWith('video/') ? storedMediaUrl : undefined,
-            mediaType: item.file?.type.startsWith('video/') ? 'video' : item.file?.type === 'application/pdf' ? 'document' : 'photo',
+            imageUrl: !contentType.startsWith('image/') ? 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800' : storedMediaUrl,
+            videoUrl: contentType.startsWith('video/') ? storedMediaUrl : undefined,
+            mediaType: contentType.startsWith('video/') ? 'video' : contentType === 'application/pdf' ? 'document' : 'photo',
             description: description || `Preserved in Album "${title}" with ${totalItems} total files.`,
             encryptionLevel,
             permawebTxId: tx.id,
@@ -680,7 +699,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setSelectedFile(null);
     setFilePreviewUrl('');
     setAlbumFiles([]);
-    setPastedUrlInput('');
+    setPastedUrlInput("");
     onClose();
   };
 
@@ -741,6 +760,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             >
               <FolderPlus className="w-4 h-4" />
               <span>Batch Album</span>
+            </button>
+
+            <button type="button" onClick={() => setCloudImportOpen(true)} className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center space-x-2 text-[#F5D77F] hover:text-[#FFF2A8] hover:bg-white/5 border border-[#DFB260]/30 transition-all cursor-pointer">
+              <Cloud className="w-4 h-4" /><span>Cloud Import</span>
             </button>
 
             {onOpenVideoRecorder && (
@@ -1466,6 +1489,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         </div>
       )}
 
+      <CloudImportModal isOpen={cloudImportOpen} onClose={() => setCloudImportOpen(false)} onImported={handleCloudImported} />
     </div>
   );
 };

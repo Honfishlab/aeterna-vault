@@ -1,6 +1,7 @@
 import { databaseConfigured, databaseError, execute, query } from "../../../server/db";
 import { authenticatedUser, createSession, destroySession, hashPassword, normalizeEmail, toAuthUser, validEmail, validPassword, verifyPassword } from "../../../server/auth";
 import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } from "../../../server/r2";
+import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogleDrive, googleConnectionStatus, googleDriveConfigured, googleThumbnail, importGoogleMedia, listGoogleMedia } from "../../../server/googleDrive";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -16,6 +17,13 @@ function json(data: unknown, status = 200) {
 
 function jsonWithCookie(data: unknown, cookie: string, status = 200) {
   return Response.json(data, { status, headers: { ...securityHeaders, "Set-Cookie": cookie } });
+}
+
+function oauthResult(success: boolean) {
+  const payload = JSON.stringify({ type: "aeterna-provider-oauth", provider: "google-drive", success }).replace(/</g, "\\u003c");
+  const message = success ? "Google Drive connected. This window will close." : "Google Drive could not be connected.";
+  const html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Google Drive</title></head><body><p>" + message + "</p><script>window.opener&&window.opener.postMessage(" + payload + ",window.location.origin);setTimeout(()=>window.close(),800)</script></body></html>";
+  return new Response(html, { status: success ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 function sameOrigin(request: Request) {
@@ -106,6 +114,31 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   const route = routeName(request);
 
+  if (route === "integrations/google/callback") {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state || url.searchParams.get("error")) return oauthResult(false);
+    try { await completeGoogleAuthorization(code, state, request); return oauthResult(true); }
+    catch (error) { console.error("Google OAuth callback failed", error); return oauthResult(false); }
+  }
+
+  if (route === "integrations/google/status" || route === "integrations/google/connect" || route === "integrations/google/files" || route.startsWith("integrations/google/thumbnail/")) {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      if (route === "integrations/google/status") return json(await googleConnectionStatus(user.id, request));
+      if (!googleDriveConfigured()) return json({ error: "Google Drive is not configured.", code: "GOOGLE_DRIVE_NOT_CONFIGURED" }, 503);
+      if (route === "integrations/google/connect") return Response.redirect(await createGoogleAuthorization(user.id, request), 302);
+      if (route === "integrations/google/files") return json(await listGoogleMedia(user.id, new URL(request.url).searchParams.get("pageToken")));
+      return await googleThumbnail(user.id, decodeURIComponent(route.replace("integrations/google/thumbnail/", "")));
+    } catch (error: any) {
+      console.error("Google Drive request failed", error);
+      const reauth = error?.message === "GOOGLE_REAUTH_REQUIRED" || error?.message === "GOOGLE_DRIVE_NOT_CONNECTED";
+      return json({ error: reauth ? "Reconnect Google Drive to continue." : "Google Drive is temporarily unavailable.", code: error?.message || "GOOGLE_DRIVE_ERROR" }, reauth ? 409 : 502);
+    }
+  }
+
   if (route === "auth/me") {
     if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
     try { return json({ user: await authenticatedUser(request) }); }
@@ -186,7 +219,32 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "integrations/google/import") {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
+      const result = await importGoogleMedia(user.id, Array.isArray(body.fileIds) ? body.fileIds : []);
+      return json(result, result.imported.length ? 200 : 422);
+    } catch (error: any) {
+      console.error("Google Drive import failed", error);
+      return json({ error: "The selected Google Drive media could not be imported.", code: error?.message || "GOOGLE_IMPORT_FAILED" }, 502);
+    }
+  }
+
+  if (route === "integrations/google/disconnect") {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      await disconnectGoogleDrive(user.id);
+      return json({ success: true });
+    } catch (error) {
+      console.error("Google Drive disconnect failed", error);
+      return json({ error: "Google Drive could not be disconnected." }, 502);
+    }
+  }
 
   if (route === "media/presign") {
     if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);

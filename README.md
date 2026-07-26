@@ -25,3 +25,18 @@ Create a private R2 bucket named `aeterna-vault-media`, then create an Object Re
 In the bucket Settings page, add the CORS policy from `r2-cors.json`. Keep public bucket access disabled. The app issues ten-minute presigned PUT URLs, verifies each uploaded object, and serves media only through authenticated same-origin endpoints.
 
 After adding the variables, run a Render Blueprint sync or manual deploy. The pre-deploy migration creates the `media_objects` ownership table.
+
+## Google Drive media import
+
+Create a Google Cloud OAuth 2.0 Web application and enable the Google Drive API. Add this production redirect URI:
+
+`https://aeterna-vault-zawj.onrender.com/api/integrations/google/callback`
+
+Configure these Render environment variables:
+
+- `APP_BASE_URL=https://aeterna-vault-zawj.onrender.com`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `MEDIA_PROVIDER_TOKEN_KEY` — a private random value of at least 32 characters
+
+The integration requests read-only Drive access. OAuth tokens are AES-GCM encrypted in PostgreSQL, selected images and videos are copied server-side into private R2 storage, and repeated imports reuse the existing vault object.

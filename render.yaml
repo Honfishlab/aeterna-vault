@@ -24,6 +24,14 @@ services:
         sync: false
       - key: R2_SECRET_ACCESS_KEY
         sync: false
+      - key: APP_BASE_URL
+        value: https://aeterna-vault-zawj.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MEDIA_PROVIDER_TOKEN_KEY
+        sync: false
 
 databases:
   - name: aeterna-vault-db
