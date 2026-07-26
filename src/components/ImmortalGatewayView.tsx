@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MemoryItem, LegacyLetter, Heir } from '../types';
+import { ImageViewerModal } from './ImageViewerModal';
 import { 
   ShieldCheck, 
   Download, 
@@ -853,29 +854,43 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
       {/* Full Screen Lightbox Modal */}
       {previewLightboxOpen && currentAsset?.imageUrl && (
-        <div 
-          onClick={() => setPreviewLightboxOpen(false)}
-          className="fixed inset-0 z-50 bg-[#05020A]/95 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
-        >
-          <button 
-            onClick={() => setPreviewLightboxOpen(false)}
-            className="absolute top-6 right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <div className="max-w-5xl max-h-[90vh] space-y-3" onClick={e => e.stopPropagation()}>
-            <img 
-              src={getMediaUrlForGateway(currentAsset)} 
-              alt={currentAsset.title}
-              className="max-h-[80vh] max-w-full object-contain mx-auto rounded-2xl border-2 border-[#DFB260] shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
-            <div className="text-center space-y-1">
-              <h3 className="font-cinzel font-bold text-lg text-[#FFF2A8]">{currentAsset.title}</h3>
-              <p className="text-xs font-mono text-[#C8B1E4]">Arweave Tx: {currentAsset.id}</p>
-            </div>
-          </div>
-        </div>
+        <ImageViewerModal
+          selectedImage={{
+            id: currentAsset.id,
+            title: currentAsset.title,
+            description: currentAsset.description || 'Verified heirloom media asset sealed on Arweave blockweave storage.',
+            date: currentAsset.date || 'Permanent',
+            time: currentAsset.time || '',
+            location: currentAsset.location,
+            imageUrl: getMediaUrlForGateway(currentAsset) || currentAsset.imageUrl,
+            encryptionLevel: currentAsset.encryptionLevel || 'Standard',
+            permawebTxId: currentAsset.id,
+            albumName: currentAsset.albumName || 'Permaweb Vault',
+            tags: currentAsset.tags || []
+          }}
+          onClose={() => setPreviewLightboxOpen(false)}
+          onPrev={() => {
+            const mediaAssets = allTxList.filter(a => a.imageUrl);
+            const currentIndex = mediaAssets.findIndex(a => a.id === currentAsset.id);
+            if (currentIndex > 0) {
+              setSelectedTxId(mediaAssets[currentIndex - 1].id);
+            } else if (mediaAssets.length > 0) {
+              setSelectedTxId(mediaAssets[mediaAssets.length - 1].id);
+            }
+          }}
+          onNext={() => {
+            const mediaAssets = allTxList.filter(a => a.imageUrl);
+            const currentIndex = mediaAssets.findIndex(a => a.id === currentAsset.id);
+            if (currentIndex < mediaAssets.length - 1) {
+              setSelectedTxId(mediaAssets[currentIndex + 1].id);
+            } else if (mediaAssets.length > 0) {
+              setSelectedTxId(mediaAssets[0].id);
+            }
+          }}
+          hasPrev={allTxList.filter(a => a.imageUrl).length > 1}
+          hasNext={allTxList.filter(a => a.imageUrl).length > 1}
+          onSelectView={onSelectView}
+        />
       )}
 
       {/* Main 2-Column Section */}
@@ -911,8 +926,14 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
                     <img 
                       src={asset.imageUrl} 
                       alt={asset.title} 
-                      className="w-12 h-12 rounded-xl object-cover border border-[#DFB260]/40 flex-shrink-0 bg-[#0A0514]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTxId(asset.id);
+                        setPreviewLightboxOpen(true);
+                      }}
+                      className="w-12 h-12 rounded-xl object-cover border border-[#DFB260]/40 flex-shrink-0 bg-[#0A0514] cursor-pointer hover:scale-105 transition-transform"
                       referrerPolicy="no-referrer"
+                      title="Click to view image in full detail modal"
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-xl bg-[#1A0F2E] border border-[#DFB260]/40 flex items-center justify-center flex-shrink-0 text-[#F5D77F]">
@@ -976,7 +997,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
                       : 'text-[#C8B1E4] hover:text-white'
                   }`}
                 >
-                  Local Vault
+                  App Gateway (200 OK)
                 </button>
                 <button
                   onClick={() => setSelectedGatewayHost('arweave.net')}
@@ -1009,8 +1030,10 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
                     <img 
                       src={getMediaUrlForGateway(currentAsset)} 
                       alt={currentAsset.title}
-                      className="max-h-[380px] w-auto max-w-full object-contain rounded-lg shadow-2xl transition-transform duration-300 group-hover:scale-[1.01]"
+                      onClick={() => setPreviewLightboxOpen(true)}
+                      className="max-h-[380px] w-auto max-w-full object-contain rounded-lg shadow-2xl transition-transform duration-300 group-hover:scale-[1.01] cursor-pointer"
                       referrerPolicy="no-referrer"
+                      title="Click to open image viewer with details"
                     />
                     <button
                       onClick={() => setPreviewLightboxOpen(true)}
@@ -1120,10 +1143,23 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
             {/* Public External Fallback Gateway Buttons */}
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-[#FFF2A8]">
-                Test Direct Access via Public Independent Arweave Gateways:
+                Test Direct Access via Permaweb Gateways & Independent Inspectors:
               </label>
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs font-mono">
+                <a
+                  href={`/gateway/${selectedTxId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-[#DFB260]/20 hover:bg-[#DFB260]/30 text-[#FFF2A8] border border-[#DFB260] p-2.5 rounded-xl flex items-center justify-between font-bold transition-all shadow-md"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>App Node Gateway</span>
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 text-[#F5D77F]" />
+                </a>
+
                 <a
                   href={`https://arweave.net/${selectedTxId}`}
                   target="_blank"
@@ -1153,6 +1189,88 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
                   <span>viewblock.io Explorer</span>
                   <ExternalLink className="w-3.5 h-3.5 text-[#F5D77F]" />
                 </a>
+              </div>
+            </div>
+
+            {/* INDEPENDENT AO ARWEAVE PERMAPAGE & LUA PROCESS SECTION */}
+            <div className="bg-[#130B24] border-2 border-[#DFB260] p-5 rounded-2xl space-y-4 shadow-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DFB260]/30 pb-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#DFB260]/20 border border-[#DFB260] text-[#FFF2A8] flex items-center justify-center font-bold">
+                    AO
+                  </div>
+                  <div>
+                    <h4 className="font-cinzel font-bold text-sm text-[#FFF2A8]">
+                      Independent AO Arweave Permapage Viewer & Lua Contract
+                    </h4>
+                    <p className="text-[11px] text-[#C8B1E4]">
+                      Zero AI Studio dependency. Deploys natively to Arweave blockweave & AO Process environment.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://arweave.net/${selectedTxId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="gold-filled-btn text-xs px-4 py-2 flex items-center space-x-1.5 shadow-md"
+                  >
+                    <span>Launch Independent Viewer</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-[#080312]" />
+                  </a>
+                  <a
+                    href="/standalone-ao-viewer"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-[#120B21] hover:bg-[#28134D] text-[#FFF2A8] border border-[#DFB260]/50 p-2 px-3 rounded-xl text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-[#F5D77F]" />
+                    <span>AO Permapage Viewer</span>
+                  </a>
+                  <a
+                    href="/public/aeterna-standalone-viewer.html"
+                    download="aeterna-standalone-viewer.html"
+                    className="bg-[#120B21] hover:bg-[#28134D] text-[#FFF2A8] border border-[#DFB260]/50 p-2 px-3 rounded-xl text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#F5D77F]" />
+                    <span>Download Permapage</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                <div className="bg-[#080312] p-3 rounded-xl border border-[#DFB260]/20 space-y-2">
+                  <div className="text-[#F5D77F] font-bold">AO Process Contract Metadata</div>
+                  <div className="text-[11px] space-y-1 text-[#C8B1E4]">
+                    <div>Process ID: <span className="text-[#FFF2A8]">ao_proc_aeterna_vault_v1</span></div>
+                    <div>Computer Engine: <span className="text-emerald-400 font-bold">AO Arweave Hyper-Parallel</span></div>
+                    <div>Handlers: <span className="text-[#FFF2A8]">Info, GetVaultData, RecordHeartbeat</span></div>
+                    <div>State Standard: <span className="text-[#FFF2A8]">AES-GCM-256 Client Encrypted</span></div>
+                  </div>
+                  <a
+                    href="/aeterna-ao-process.lua"
+                    download="aeterna-ao-process.lua"
+                    className="inline-flex items-center gap-1 text-[11px] text-[#F5D77F] hover:underline font-bold pt-1"
+                  >
+                    <Download className="w-3 h-3 text-[#F5D77F]" />
+                    <span>Download Production Lua Contract (.lua)</span>
+                  </a>
+                </div>
+
+                <div className="bg-[#080312] p-3 rounded-xl border border-[#DFB260]/20 space-y-2">
+                  <div className="text-[#F5D77F] font-bold">Deploy to AO Network via AOS CLI</div>
+                  <pre className="text-[10px] text-emerald-400 bg-[#040108] p-2 rounded-lg overflow-x-auto border border-emerald-950">
+{`# 1. Start AOS Process on Arweave
+aos aeterna-vault-ao
+
+# 2. Load Process Lua Script
+.load aeterna-ao-process.lua
+
+# 3. Query Process State
+Send({ Target = ao.id, Action = "Info" })`}
+                  </pre>
+                </div>
               </div>
             </div>
 

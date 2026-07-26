@@ -13,10 +13,14 @@ import { MemorialsView } from './components/MemorialsView';
 import { LockerView } from './components/LockerView';
 import { InheritanceView } from './components/InheritanceView';
 import { ImmortalGatewayView } from './components/ImmortalGatewayView';
+import { AuditView } from './components/AuditView';
 import { UploadModal } from './components/UploadModal';
+import { VideoRecorderModal } from './components/VideoRecorderModal';
 import { WalletModal } from './components/WalletModal';
 import { ConciergeChatModal } from './components/ConciergeChatModal';
 import { AuthModal } from './components/AuthModal';
+import { VaultExportModal } from './components/VaultExportModal';
+import { NotificationProvider } from './components/NotificationSystem';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
@@ -96,11 +100,28 @@ export default function App() {
 
   const [triggerConfig, setTriggerConfig] = useState<InheritanceTriggerConfig>(INITIAL_TRIGGER_CONFIG);
 
-  // Async hydration from high-capacity IndexedDB vault storage
+  // Async hydration from server persistent store & IndexedDB vault storage
   useEffect(() => {
     async function hydrateFromVault() {
       const isDemoCleared = localStorage.getItem('aeterna_demo_cleared') === 'true';
-      
+
+      // 1. Try loading from server persistent storage first
+      try {
+        const res = await fetch('/api/vault/data');
+        if (res.ok) {
+          const body = await res.json();
+          if (body.data) {
+            if (Array.isArray(body.data.memories)) setMemories(body.data.memories);
+            if (Array.isArray(body.data.letters)) setLetters(body.data.letters);
+            if (Array.isArray(body.data.heirs)) setHeirs(body.data.heirs);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Server vault fetch notice, using IndexedDB fallback:', err);
+      }
+
+      // 2. Fallback to IndexedDB / local storage
       const dbMemories = await getVaultItem<MemoryItem[]>('aeterna_memories');
       if (dbMemories !== null) {
         setMemories(dbMemories);
@@ -127,6 +148,18 @@ export default function App() {
     }
     hydrateFromVault();
   }, []);
+
+  // Sync state to server whenever vault items are updated
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetch('/api/vault/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memories, letters, heirs, memorials })
+      }).catch(err => console.warn('Vault server sync notice:', err));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [memories, letters, heirs, memorials]);
 
   // Clear demo content handler
   const handleClearDemoContent = () => {
@@ -173,10 +206,35 @@ export default function App() {
 
   // Modal Visibility
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [videoRecorderOpen, setVideoRecorderOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [conciergeModalOpen, setConciergeModalOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  // Restore backup handler
+  const handleRestoreBackup = (backupData: {
+    memories: MemoryItem[];
+    letters: LegacyLetter[];
+    memorials: MemorialShrine[];
+    heirs: Heir[];
+  }) => {
+    if (backupData.memories) setMemories(backupData.memories);
+    if (backupData.letters) setLetters(backupData.letters);
+    if (backupData.memorials) setMemorials(backupData.memorials);
+    if (backupData.heirs) setHeirs(backupData.heirs);
+
+    try {
+      if (backupData.memories) setVaultItem('aeterna_memories', backupData.memories);
+      if (backupData.letters) setVaultItem('aeterna_letters', backupData.letters);
+      if (backupData.memorials) setVaultItem('aeterna_memorials', backupData.memorials);
+      if (backupData.heirs) setVaultItem('aeterna_heirs', backupData.heirs);
+      localStorage.removeItem('aeterna_demo_cleared');
+    } catch (e) {
+      console.error('Failed to save restored backup to vault storage', e);
+    }
+  };
 
   // Handle URL route or hash navigation for login/signup
   useEffect(() => {
@@ -270,16 +328,74 @@ export default function App() {
   };
 
   const handleToggleCandle = (id: string) => {
-    setMemorials(prev => prev.map(m => {
-      if (m.id === id) {
-        return {
-          ...m,
-          candleLitToday: !m.candleLitToday,
-          tributesCount: !m.candleLitToday ? m.tributesCount + 1 : m.tributesCount - 1
-        };
-      }
-      return m;
-    }));
+    setMemorials(prev => {
+      const updated = prev.map(m => {
+        if (m.id === id) {
+          const isNowLit = !m.candleLitToday;
+          const currentCount = m.candlesLitCount || 100;
+          return {
+            ...m,
+            candleLitToday: isNowLit,
+            candlesLitCount: isNowLit ? currentCount + 1 : Math.max(0, currentCount - 1),
+            tributesCount: isNowLit ? m.tributesCount + 1 : m.tributesCount
+          };
+        }
+        return m;
+      });
+      setVaultItem('aeterna_memorials', updated);
+      return updated;
+    });
+  };
+
+  const handleOfferFlowers = (id: string) => {
+    setMemorials(prev => {
+      const updated = prev.map(m => {
+        if (m.id === id) {
+          return {
+            ...m,
+            flowersOfferedCount: (m.flowersOfferedCount || 0) + 1,
+            tributesCount: m.tributesCount + 1
+          };
+        }
+        return m;
+      });
+      setVaultItem('aeterna_memorials', updated);
+      return updated;
+    });
+  };
+
+  const handleAddTribute = (shrineId: string, tribute: import('./types').TributeNote) => {
+    setMemorials(prev => {
+      const updated = prev.map(m => {
+        if (m.id === shrineId) {
+          const existingTributes = m.tributes || [];
+          return {
+            ...m,
+            tributes: [tribute, ...existingTributes],
+            tributesCount: m.tributesCount + 1
+          };
+        }
+        return m;
+      });
+      setVaultItem('aeterna_memorials', updated);
+      return updated;
+    });
+  };
+
+  const handleAddMemorial = (newShrine: MemorialShrine) => {
+    setMemorials(prev => {
+      const updated = [newShrine, ...prev];
+      setVaultItem('aeterna_memorials', updated);
+      return updated;
+    });
+  };
+
+  const handleEditMemorial = (updatedShrine: MemorialShrine) => {
+    setMemorials(prev => {
+      const updated = prev.map(m => m.id === updatedShrine.id ? updatedShrine : m);
+      setVaultItem('aeterna_memorials', updated);
+      return updated;
+    });
   };
 
   const handleToggleWalletConnect = () => {
@@ -302,7 +418,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen text-[#E8DDF5] font-sans antialiased selection:bg-[#DFB260] selection:text-[#120B21] pb-12 relative">
+    <NotificationProvider onViewAuditLog={() => setCurrentView('audit')}>
+      <div className="min-h-screen text-[#E8DDF5] font-sans antialiased selection:bg-[#DFB260] selection:text-[#120B21] pb-12 relative">
       
       {/* Top Header Navigation (hidden on landing page for clean full-screen experience) */}
       {currentView !== 'landing' && (
@@ -315,6 +432,8 @@ export default function App() {
           walletState={walletState}
           onOpenWallet={() => setWalletModalOpen(true)}
           onOpenUpload={() => setUploadModalOpen(true)}
+          onOpenVideoRecorder={() => setVideoRecorderOpen(true)}
+          onOpenExportModal={() => setExportModalOpen(true)}
           currentUser={currentUser}
           onOpenAuth={() => setAuthModalOpen(true)}
           searchQuery={searchQuery}
@@ -355,6 +474,7 @@ export default function App() {
             <DashboardView
               onSelectView={setCurrentView}
               onOpenUpload={() => setUploadModalOpen(true)}
+              onOpenVideoRecorder={() => setVideoRecorderOpen(true)}
               onOpenConcierge={() => setConciergeModalOpen(true)}
               memories={memories}
               memorials={memorials}
@@ -379,6 +499,7 @@ export default function App() {
             onAddLetter={handleAddLetter}
             onDeleteLetter={handleDeleteLetter}
             onOpenConcierge={() => setConciergeModalOpen(true)}
+            onOpenVideoRecorder={() => setVideoRecorderOpen(true)}
           />
         )}
 
@@ -406,7 +527,12 @@ export default function App() {
           <MemorialsView
             onSelectView={setCurrentView}
             memorials={memorials}
+            memories={memories}
             onToggleCandle={handleToggleCandle}
+            onOfferFlowers={handleOfferFlowers}
+            onAddTribute={handleAddTribute}
+            onAddMemorial={handleAddMemorial}
+            onEditMemorial={handleEditMemorial}
             onDeleteMemorial={handleDeleteMemorial}
           />
         )}
@@ -414,6 +540,8 @@ export default function App() {
         {currentView === 'locker' && (
           <LockerView
             onSelectView={setCurrentView}
+            onOpenGlobalUpload={() => setUploadModalOpen(true)}
+            onOpenExportModal={() => setExportModalOpen(true)}
           />
         )}
 
@@ -439,6 +567,16 @@ export default function App() {
             onSelectView={setCurrentView}
           />
         )}
+
+        {currentView === 'audit' && (
+          <AuditView
+            memories={memories}
+            letters={letters}
+            onSelectView={setCurrentView}
+            onOpenUpload={() => setUploadModalOpen(true)}
+            onOpenExportModal={() => setExportModalOpen(true)}
+          />
+        )}
       </main>
       )}
 
@@ -446,6 +584,13 @@ export default function App() {
       <UploadModal
         isOpen={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
+        onAddMemory={handleAddMemory}
+        onOpenVideoRecorder={() => setVideoRecorderOpen(true)}
+      />
+
+      <VideoRecorderModal
+        isOpen={videoRecorderOpen}
+        onClose={() => setVideoRecorderOpen(false)}
         onAddMemory={handleAddMemory}
       />
 
@@ -478,6 +623,19 @@ export default function App() {
         onRestoreDemoContent={handleRestoreDemoContent}
       />
 
-    </div>
+      <VaultExportModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        memories={memories}
+        letters={letters}
+        memorials={memorials}
+        heirs={heirs}
+        triggerConfig={triggerConfig}
+        userProfile={currentUser}
+        onRestoreBackup={handleRestoreBackup}
+      />
+
+      </div>
+    </NotificationProvider>
   );
 }

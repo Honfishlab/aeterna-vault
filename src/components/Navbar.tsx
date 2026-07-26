@@ -19,7 +19,11 @@ import {
   ChevronDown,
   Globe,
   LogIn,
-  UserCheck
+  UserCheck,
+  FileCheck,
+  Video,
+  Archive,
+  Download
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -28,6 +32,8 @@ interface NavbarProps {
   walletState: WalletState;
   onOpenWallet: () => void;
   onOpenUpload: () => void;
+  onOpenVideoRecorder?: () => void;
+  onOpenExportModal?: () => void;
   currentUser: UserProfile | null;
   onOpenAuth: () => void;
   searchQuery: string;
@@ -41,6 +47,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   walletState,
   onOpenWallet,
   onOpenUpload,
+  onOpenVideoRecorder,
+  onOpenExportModal,
   currentUser,
   onOpenAuth,
   searchQuery,
@@ -52,6 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems: { id: ViewMode; label: string; icon: any }[] = [
     { id: 'landing', label: 'Landing', icon: Shield },
     { id: 'dashboard', label: 'Dashboard', icon: Layers },
+    { id: 'audit', label: 'Audit', icon: FileCheck },
     { id: 'immortal', label: 'Immortal Gateway', icon: Globe },
     { id: 'inheritance', label: 'Inheritance Protocol', icon: Users },
     { id: 'legacy', label: 'Time Capsule', icon: BookOpen },
@@ -126,7 +135,33 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Right Actions */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Record Video Camera Button */}
+            {onOpenVideoRecorder && (
+              <button
+                id="btn-quick-record-video"
+                onClick={onOpenVideoRecorder}
+                className="hidden md:flex items-center space-x-1.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-2 text-xs rounded-xl shadow-md border border-amber-400/40 transition-all cursor-pointer active:scale-95"
+                title="Turn on camera for live video or photo capture"
+              >
+                <Video className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
+                <span>Live Record</span>
+              </button>
+            )}
+
+            {/* Vault Backup Export Button */}
+            {onOpenExportModal && (
+              <button
+                id="btn-vault-export-backup"
+                onClick={onOpenExportModal}
+                className="hidden xl:flex items-center space-x-1.5 bg-[#0A0514] hover:bg-[#1A0C33] text-[#F5D77F] border border-[#DFB260]/40 font-semibold px-3 py-2 text-xs rounded-xl shadow transition-all cursor-pointer active:scale-95"
+                title="Generate & Download Vault JSON Backup"
+              >
+                <Archive className="w-3.5 h-3.5 text-[#F5D77F]" />
+                <span>Vault Export</span>
+              </button>
+            )}
+
             {/* New Memory Button */}
             <button
               id="btn-quick-new-memory"

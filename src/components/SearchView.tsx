@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewMode, MemoryItem } from '../types';
+import { ImageViewerModal } from './ImageViewerModal';
 import { 
   Search, 
   FolderPlus, 
@@ -311,13 +312,17 @@ export const SearchView: React.FC<SearchViewProps> = ({
         mem.category.toLowerCase().includes(q) ||
         (mem.albumName && mem.albumName.toLowerCase().includes(q)) ||
         (mem.location && mem.location.toLowerCase().includes(q)) ||
-        (mem.tags && mem.tags.some(t => t.toLowerCase().includes(q)));
+        (mem.people && mem.people.some(p => p.toLowerCase().includes(q))) ||
+        (mem.tags && mem.tags.some(t => t.toLowerCase().includes(q))) ||
+        (mem.autoTags && mem.autoTags.people && mem.autoTags.people.some(p => p.toLowerCase().includes(q))) ||
+        (mem.autoTags && mem.autoTags.tags && mem.autoTags.tags.some(t => t.toLowerCase().includes(q)));
 
       let matchesFilter = true;
       if (selectedFilter !== 'All') {
         const sf = selectedFilter.toLowerCase();
         matchesFilter = (mem.albumName && mem.albumName.toLowerCase() === sf) ||
                         (mem.tags && mem.tags.some(t => t.toLowerCase() === sf)) ||
+                        (mem.people && mem.people.some(p => p.toLowerCase() === sf)) ||
                         mem.category.toLowerCase() === sf ||
                         mem.title.toLowerCase().includes(sf);
       }
@@ -802,7 +807,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
             return (
               <div
                 key={mem.id}
-                onClick={(e) => handleGridPhotoClick(mem, idx, e)}
+                onClick={(e) => {
+                  if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                    handleGridPhotoClick(mem, idx, e);
+                  } else {
+                    setSelectedImage(mem);
+                  }
+                }}
                 className={`group bg-[#180E2B]/90 border rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 flex flex-col justify-between cursor-pointer ${
                   isSelectedInGrid
                     ? 'border-[#DFB260] ring-4 ring-[#DFB260]/50 scale-[1.01] shadow-[#DFB260]/30'
@@ -817,7 +828,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     src={mem.imageUrl || 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800'}
                     alt={mem.title}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onClick={(e) => {
+                      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                        e.stopPropagation();
+                        setSelectedImage(mem);
+                      }
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0F081D] via-[#0F081D]/40 to-transparent"></div>
 
@@ -1471,390 +1488,42 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
       )}
 
-      {/* GOOGLE PHOTOS FORMAT LIGHTBOX MODAL */}
+      {/* IMAGE VIEWER MODAL WITH ALL DETAILS */}
       {selectedImage && (
-        <div 
-          className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none animate-fade-in"
-          onClick={() => setSelectedImage(null)}
-        >
-          {/* TOP TRANSLUCENT OVERLAY BAR */}
-          <div 
-            className="absolute top-0 left-0 right-0 z-30 p-3 sm:p-5 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between text-white pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Left: Back / Close & Title */}
-            <div className="flex items-center space-x-3 min-w-0">
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="p-2 rounded-full hover:bg-white/10 text-white transition-colors cursor-pointer"
-                title="Close Lightbox (Esc)"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-
-              <div className="min-w-0">
-                <h3 className="font-bold text-sm sm:text-base text-white truncate max-w-xs sm:max-w-md">
-                  {selectedImage.title}
-                </h3>
-                <p className="text-xs text-white/70 font-mono flex items-center gap-2 truncate">
-                  <span>{selectedImage.date} {selectedImage.time ? `• ${selectedImage.time}` : ''}</span>
-                  {selectedImage.albumName && (
-                    <span className="text-[#F5D77F] font-semibold bg-white/10 px-2 py-0.5 rounded-full text-[10px]">
-                      📁 {selectedImage.albumName}
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Right: Actions (Index counter, Info Drawer Toggle, Share, Zoom/Original, Close) */}
-            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-              {filteredMemories.length > 0 && (
-                <span className="text-xs font-mono bg-white/10 text-white/90 px-3 py-1 rounded-full font-medium hidden sm:inline-block">
-                  {filteredMemories.findIndex(m => m.id === selectedImage.id) + 1} / {filteredMemories.length}
-                </span>
-              )}
-
-              <button
-                onClick={() => {
-                  setSelectedImage(null);
-                  onSelectView('immortal');
-                }}
-                className="p-2 rounded-full hover:bg-white/10 text-[#F5D77F] hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 px-3 bg-white/10 border border-[#DFB260]/40"
-                title="Immortal Gateway Independent Viewer"
-              >
-                <Globe className="w-4 h-4 text-[#F5D77F]" />
-                <span className="text-xs font-mono font-bold hidden sm:inline">Immortal Gateway</span>
-              </button>
-
-              <a
-                href={selectedImage.imageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer hidden sm:flex"
-                title="Open Original Image"
-              >
-                <ExternalLink className="w-5 h-5" />
-              </a>
-
-              <button
-                onClick={() => alert(`Copied immutable Arweave link: https://arweave.net/${selectedImage.permawebTxId}`)}
-                className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer"
-                title="Share Immutable Link"
-              >
-                <Share2 className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={() => setShowLightboxInfo(prev => !prev)}
-                className={`p-2 rounded-full transition-colors cursor-pointer ${
-                  showLightboxInfo ? 'bg-[#DFB260] text-black font-bold shadow-lg' : 'hover:bg-white/10 text-white/90'
-                }`}
-                title="Photo Details (Info)"
-              >
-                <Info className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={(e) => handleDeleteSingleMemory(selectedImage.id, e)}
-                className="p-2 rounded-full hover:bg-red-600/80 text-red-400 hover:text-white transition-colors cursor-pointer"
-                title="Delete Memory Item"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-
-          {/* MAIN FULL-SCREEN PHOTO CANVAS */}
-          <div 
-            className="relative w-full h-full flex-1 flex items-center justify-center p-0 overflow-hidden"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setSelectedImage(null);
-              }
-            }}
-          >
-            <img
-              src={selectedImage.imageUrl}
-              alt={selectedImage.title}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-full max-h-full w-auto h-auto object-contain select-none transition-all duration-300 pointer-events-auto"
-              style={{
-                maxHeight: '100vh',
-                maxWidth: showLightboxInfo ? 'calc(100vw - 380px)' : '100vw'
-              }}
-            />
-
-            {/* FLOATING PREVIOUS / NEXT ARROWS */}
-            {filteredMemories.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const currentIndex = filteredMemories.findIndex(m => m.id === selectedImage.id);
-                    if (currentIndex > 0) {
-                      setSelectedImage(filteredMemories[currentIndex - 1]);
-                    } else {
-                      setSelectedImage(filteredMemories[filteredMemories.length - 1]);
-                    }
-                  }}
-                  className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/50 hover:bg-[#DFB260] text-white hover:text-black flex items-center justify-center backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-2xl opacity-80 hover:opacity-100"
-                  title="Previous Photo (Left Arrow)"
-                >
-                  <ChevronLeft className="w-7 h-7" />
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const currentIndex = filteredMemories.findIndex(m => m.id === selectedImage.id);
-                    if (currentIndex < filteredMemories.length - 1) {
-                      setSelectedImage(filteredMemories[currentIndex + 1]);
-                    } else {
-                      setSelectedImage(filteredMemories[0]);
-                    }
-                  }}
-                  className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/50 hover:bg-[#DFB260] text-white hover:text-black flex items-center justify-center backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-2xl opacity-80 hover:opacity-100"
-                  style={{
-                    right: showLightboxInfo ? 'calc(380px + 1.5rem)' : '1.5rem'
-                  }}
-                  title="Next Photo (Right Arrow)"
-                >
-                  <ChevronRight className="w-7 h-7" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* BOTTOM OVERLAY BAR (when sidebar is closed) */}
-          {!showLightboxInfo && (
-            <div 
-              className="absolute bottom-0 left-0 right-0 z-20 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pointer-events-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="space-y-1 max-w-3xl">
-                <div className="flex items-center space-x-2 text-xs font-mono text-[#F5D77F]">
-                  <span>{selectedImage.date} {selectedImage.time ? `• ${selectedImage.time}` : ''}</span>
-                  {selectedImage.location && (
-                    <>
-                      <span>•</span>
-                      <span>📍 {selectedImage.location}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-sm text-white/90 font-medium line-clamp-2 leading-relaxed">
-                  {selectedImage.description}
-                </p>
-                <div className="flex items-center space-x-1.5 pt-1 flex-wrap gap-y-1">
-                  {selectedImage.tags?.map((t) => (
-                    <span key={t} className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-white/10 text-[#FFF2A8] border border-white/20">
-                      #{t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowLightboxInfo(true)}
-                className="gold-beveled-btn text-xs px-4 py-2 text-[#FFF2A8] font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-end sm:self-center"
-              >
-                <Info className="w-4 h-4 text-[#F5D77F]" />
-                <span>View Full Details</span>
-              </button>
-            </div>
-          )}
-
-          {/* GOOGLE PHOTOS STYLE RIGHT INFO SIDEBAR */}
-          {showLightboxInfo && (
-            <div 
-              className="absolute top-0 right-0 bottom-0 z-40 w-full sm:w-96 bg-[#0e071b]/95 backdrop-blur-2xl border-l border-[#DFB260]/40 p-6 flex flex-col justify-between overflow-y-auto shadow-2xl text-white pointer-events-auto animate-fade-in"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="space-y-6">
-                {/* Info Header */}
-                <div className="flex items-center justify-between border-b border-[#DFB260]/30 pb-4">
-                  <h3 className="font-cinzel font-bold text-lg text-[#FFF2A8] flex items-center gap-2">
-                    <Info className="w-5 h-5 text-[#F5D77F]" />
-                    <span>Photo Info</span>
-                  </h3>
-                  <button
-                    onClick={() => setShowLightboxInfo(false)}
-                    className="p-1.5 rounded-full hover:bg-white/10 text-white/70 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Details list */}
-                <div className="space-y-4 text-xs">
-                  <div>
-                    <label className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider block font-bold mb-1">
-                      Title
-                    </label>
-                    <p className="font-bold text-sm text-[#FFF2A8]">{selectedImage.title}</p>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider block font-bold mb-1">
-                      Description
-                    </label>
-                    <p className="text-[#C8B1E4] leading-relaxed font-medium bg-[#120B21] p-3 rounded-xl border border-[#DFB260]/20">
-                      {selectedImage.description || 'No description provided.'}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 bg-[#120B21] p-3 rounded-xl border border-[#DFB260]/20">
-                    <div>
-                      <span className="text-[10px] text-[#F5D77F] font-mono block">Date Preserved</span>
-                      <span className="font-bold text-[#FFF2A8]">{selectedImage.date}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#F5D77F] font-mono block">Time</span>
-                      <span className="font-bold text-[#FFF2A8]">{selectedImage.time || 'N/A'}</span>
-                    </div>
-                  </div>
-
-                  {selectedImage.location && (
-                    <div className="bg-[#120B21] p-3 rounded-xl border border-[#DFB260]/20">
-                      <span className="text-[10px] text-[#F5D77F] font-mono block">Location</span>
-                      <span className="font-bold text-[#FFF2A8]">📍 {selectedImage.location}</span>
-                    </div>
-                  )}
-
-                  {selectedImage.albumName && (
-                    <div className="bg-[#120B21] p-3 rounded-xl border border-[#DFB260]/20 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-[#F5D77F] font-mono block">Album</span>
-                        <span className="font-bold text-[#FFF2A8]">📁 {selectedImage.albumName}</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const albumName = selectedImage.albumName!;
-                          setSelectedImage(null);
-                          handleOpenEditAlbum(albumName);
-                        }}
-                        className="text-[11px] text-[#F5D77F] hover:underline flex items-center gap-1 font-semibold cursor-pointer bg-[#DFB260]/20 px-2.5 py-1 rounded-lg border border-[#DFB260]/40"
-                      >
-                        <FolderEdit className="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider block font-bold mb-1.5">
-                      Tags
-                    </label>
-                    <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                      {selectedImage.tags?.map((t) => (
-                        <span key={t} className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-[#120B21] text-[#F5D77F] border border-[#DFB260]/30 font-medium">
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#120B21] p-3.5 rounded-xl border border-[#DFB260]/30 space-y-2">
-                    <span className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider font-bold block">
-                      Permanent Storage Specs
-                    </span>
-                    <div className="space-y-1 text-[11px] font-mono text-[#C8B1E4]">
-                      <div className="flex justify-between">
-                        <span>Encryption:</span>
-                        <span className="text-[#FFF2A8] font-semibold">{selectedImage.encryptionLevel}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Storage Network:</span>
-                        <span className="text-[#FFF2A8] font-semibold">Arweave Permaweb</span>
-                      </div>
-                      <div className="truncate pt-1 border-t border-[#DFB260]/20">
-                        <span>Tx ID: </span>
-                        <span className="text-[#F5D77F] font-bold">{selectedImage.permawebTxId}</span>
-                      </div>
-
-                      <div className="pt-2 border-t border-[#DFB260]/30 space-y-2">
-                        <span className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider font-bold block">
-                          Immortal Gateway Independent Viewer
-                        </span>
-                        <button
-                          onClick={() => {
-                            setSelectedImage(null);
-                            onSelectView('immortal');
-                          }}
-                          className="w-full bg-[#23173A] hover:bg-[#322252] text-[#FFF2A8] text-xs font-mono font-bold py-2.5 px-3 rounded-xl border border-[#DFB260]/60 flex items-center justify-between transition-colors group cursor-pointer shadow-sm"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Globe className="w-4 h-4 text-[#F5D77F]" />
-                            <span>Launch Independent Viewer</span>
-                          </span>
-                          <ArrowRight className="w-3.5 h-3.5 text-[#F5D77F] group-hover:translate-x-1 transition-transform" />
-                        </button>
-                        <a
-                          href={`https://arweave.net/${selectedImage.permawebTxId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] font-mono text-[#F5D77F] hover:underline flex items-center gap-1 font-bold pt-0.5"
-                        >
-                          <ExternalLink className="w-3 h-3 text-[#F5D77F]" />
-                          <span className="truncate">https://arweave.net/{selectedImage.permawebTxId}</span>
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sidebar Action Buttons */}
-              <div className="pt-4 border-t border-[#DFB260]/30 space-y-2">
-                <button
-                  onClick={() => {
-                    setSelectedImage(null);
-                    onSelectView('immortal');
-                  }}
-                  className="bg-[#2E2342] hover:bg-[#3E2F59] text-[#FFF2A8] border border-[#DFB260]/70 w-full text-xs py-2.5 font-bold flex items-center justify-center gap-2 cursor-pointer rounded-xl transition-all shadow-md"
-                >
-                  <Globe className="w-4 h-4 text-[#F5D77F]" />
-                  <span>Immortal Gateway Viewer</span>
-                </button>
-
-                <a
-                  href={selectedImage.imageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="gold-beveled-btn w-full text-xs py-2 text-[#FFF2A8] font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ExternalLink className="w-4 h-4 text-[#F5D77F]" />
-                  <span>Open Full Resolution</span>
-                </a>
-
-                <button
-                  onClick={() => alert(`Copied immutable Arweave link: https://arweave.net/${selectedImage.permawebTxId}`)}
-                  className="gold-filled-btn w-full text-xs py-2 font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Share2 className="w-4 h-4" />
-                  <span>Share Immutable Link</span>
-                </button>
-
-                <button
-                  onClick={(e) => handleDeleteSingleMemory(selectedImage.id, e)}
-                  className="bg-red-950/80 hover:bg-red-800 text-red-200 border border-red-500/40 w-full text-xs py-2 font-bold flex items-center justify-center gap-2 cursor-pointer rounded-xl transition-colors mt-2"
-                >
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                  <span>Delete Memory Item</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <ImageViewerModal
+          image={selectedImage}
+          onClose={() => setSelectedImage(null)}
+          onPrev={() => {
+            const currentIndex = filteredMemories.findIndex(m => m.id === selectedImage.id);
+            if (currentIndex > 0) {
+              setSelectedImage(filteredMemories[currentIndex - 1]);
+            } else {
+              setSelectedImage(filteredMemories[filteredMemories.length - 1]);
+            }
+          }}
+          onNext={() => {
+            const currentIndex = filteredMemories.findIndex(m => m.id === selectedImage.id);
+            if (currentIndex < filteredMemories.length - 1) {
+              setSelectedImage(filteredMemories[currentIndex + 1]);
+            } else {
+              setSelectedImage(filteredMemories[0]);
+            }
+          }}
+          hasPrev={filteredMemories.length > 1}
+          hasNext={filteredMemories.length > 1}
+          onDelete={(id) => handleDeleteSingleMemory(id)}
+          onSelectView={onSelectView}
+          onOpenEditAlbum={handleOpenEditAlbum}
+        />
       )}
+
+
+
+
+
+
+
+
 
       {/* FLOATING MULTI-SELECTION ACTION BAR */}
       {selectedGridPhotoIds.length > 0 && (

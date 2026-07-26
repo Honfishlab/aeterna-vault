@@ -5,6 +5,7 @@ import {
   encryptData, 
   saveTransactionToLedger 
 } from '../lib/arweaveEngine';
+import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { 
   Upload, 
@@ -21,13 +22,27 @@ import {
   Clock,
   Layers,
   Sparkles,
-  Loader2
+  Loader2,
+  Video,
+  Camera,
+  Users,
+  Bot,
+  Wand2,
+  Tag,
+  MapPin,
+  Mic,
+  Square,
+  Play,
+  Pause,
+  RotateCcw,
+  Volume2
 } from 'lucide-react';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddMemory: (memory: MemoryItem | MemoryItem[]) => void;
+  onOpenVideoRecorder?: () => void;
 }
 
 export interface AlbumFileItem {
@@ -42,6 +57,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
   onAddMemory,
+  onOpenVideoRecorder,
 }) => {
   // Upload mode: 'single' or 'album'
   const [uploadMode, setUploadMode] = useState<'single' | 'album'>('single');
@@ -54,7 +70,145 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('Family, Summer, Memories');
+  const [people, setPeople] = useState('Wayne, Clara Pendelton');
   const [encryptionLevel, setEncryptionLevel] = useState<'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof'>('Level 5 Protected');
+
+  // AI Auto-Tagging state & Real-time Progress Indicator
+  const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiStep, setAiStep] = useState<1 | 2 | 3>(1);
+  const [aiStepStatusText, setAiStepStatusText] = useState('');
+  const [aiSuggestions, setAiSuggestions] = useState<{
+    category?: string;
+    people?: string[];
+    location?: string;
+    tags?: string[];
+    description?: string;
+  } | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+
+  // Audio-to-Text Recording state inside UploadModal
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordingTime, setAudioRecordingTime] = useState(0);
+  const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [isPlayingRecordedAudio, setIsPlayingRecordedAudio] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<any>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+  const startAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            setAudioDataUrl(reader.result);
+          }
+        };
+        reader.readAsDataURL(audioBlob);
+
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingAudio(true);
+      setAudioRecordingTime(0);
+
+      timerIntervalRef.current = setInterval(() => {
+        setAudioRecordingTime(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      alert('Microphone access denied or unavailable. Please check browser microphone permissions.');
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && isRecordingAudio) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    }
+  };
+
+  const resetAudioRecording = () => {
+    if (isRecordingAudio) {
+      stopAudioRecording();
+    }
+    setAudioDataUrl(null);
+    setAudioRecordingTime(0);
+    setIsPlayingRecordedAudio(false);
+  };
+
+  const togglePlayAudio = () => {
+    if (!audioDataUrl) return;
+    if (!audioElementRef.current) {
+      audioElementRef.current = new Audio(audioDataUrl);
+      audioElementRef.current.onended = () => setIsPlayingRecordedAudio(false);
+    } else {
+      audioElementRef.current.src = audioDataUrl;
+    }
+
+    if (isPlayingRecordedAudio) {
+      audioElementRef.current.pause();
+      setIsPlayingRecordedAudio(false);
+    } else {
+      audioElementRef.current.play().catch(console.error);
+      setIsPlayingRecordedAudio(true);
+    }
+  };
+
+  const handleTranscribeAudio = async () => {
+    if (!audioDataUrl) return;
+    setIsTranscribingAudio(true);
+
+    try {
+      const res = await fetch('/api/ai/transcribe-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioData: audioDataUrl,
+          mimeType: 'audio/webm',
+          shrineName: title || 'Time Capsule Memory',
+          authorName: people || 'Family Historian'
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.transcription) {
+          setDescription(prev => prev ? `${prev}\n\n[Spoken Story Transcription]: ${data.transcription}` : data.transcription);
+          triggerGlobalArweaveAlert({
+            type: 'failure',
+            itemTitle: 'Spoken Memory Transcribed',
+            errorMsg: 'Gemini AI successfully transcribed your voice recording into story text!'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error transcribing audio:', err);
+    } finally {
+      setIsTranscribingAudio(false);
+    }
+  };
 
   // Single file states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -84,6 +238,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     const fileList = Array.from(files);
     if (fileList.length === 0) return;
 
+    let targetPreviewForAI = '';
+
     if (fileList.length > 1 || uploadMode === 'album') {
       // Switch to album mode if multiple files selected
       if (uploadMode !== 'album') {
@@ -97,6 +253,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       for (let index = 0; index < fileList.length; index++) {
         const file = fileList[index];
         const previewUrl = await compressImageFile(file);
+        if (index === 0) targetPreviewForAI = previewUrl;
         setAlbumFiles(prev => [
           ...prev,
           {
@@ -117,6 +274,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       }
       const previewUrl = await compressImageFile(file);
       setFilePreviewUrl(previewUrl);
+      targetPreviewForAI = previewUrl;
+    }
+
+    // Auto-trigger AI Auto-Tagging analysis with real-time visual indicator
+    if (targetPreviewForAI) {
+      handleRunAIAutoTag(targetPreviewForAI);
     }
   };
 
@@ -195,6 +358,86 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setSelectedAlbumItemIds([]);
   };
 
+  const handleRunAIAutoTag = async (overridePreviewUrl?: string) => {
+    setIsAnalyzingAI(true);
+    setAiApplied(false);
+    setAiProgress(12);
+    setAiStep(1);
+    setAiStepStatusText('Step 1/3: Scanning visual features & facial landmarks...');
+
+    const timer1 = setTimeout(() => {
+      setAiProgress(48);
+      setAiStep(2);
+      setAiStepStatusText('Step 2/3: Detecting location landmarks, spatial surroundings & geodata...');
+    }, 450);
+
+    const timer2 = setTimeout(() => {
+      setAiProgress(82);
+      setAiStep(3);
+      setAiStepStatusText('Step 3/3: Extracting categorical metadata, sentiment & deep tags...');
+    }, 900);
+
+    try {
+      const previewData = overridePreviewUrl || filePreviewUrl || singleImageUrl || (albumFiles.length > 0 ? albumFiles[0].previewUrl : undefined);
+      
+      const res = await fetch('/api/ai/auto-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageData: previewData && previewData.startsWith('data:') ? previewData : undefined,
+          imageUrl: previewData && !previewData.startsWith('data:') ? previewData : undefined,
+          title: title || 'Family Memory Photo',
+          description: description,
+          category: category
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        setAiProgress(100);
+        setAiStep(3);
+        setAiStepStatusText('Auto-Tagging Analysis Complete!');
+        setAiSuggestions(data);
+      }
+    } catch (err) {
+      console.error('Error running AI auto-tagging:', err);
+    } finally {
+      setTimeout(() => {
+        setIsAnalyzingAI(false);
+      }, 500);
+    }
+  };
+
+  const handleApplyAISuggestions = () => {
+    if (!aiSuggestions) return;
+
+    if (aiSuggestions.category && (['Personal', 'Family', 'Legal', 'Memorial', 'Time Capsule'].includes(aiSuggestions.category))) {
+      setCategory(aiSuggestions.category as any);
+    }
+
+    if (aiSuggestions.people && aiSuggestions.people.length > 0) {
+      setPeople(aiSuggestions.people.join(', '));
+    }
+
+    if (aiSuggestions.location) {
+      setLocation(aiSuggestions.location);
+    }
+
+    if (aiSuggestions.tags && aiSuggestions.tags.length > 0) {
+      const currentTags = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+      const newTags = Array.from(new Set([...currentTags, ...aiSuggestions.tags]));
+      setTags(newTags.join(', '));
+    }
+
+    if (aiSuggestions.description) {
+      setDescription(prev => prev ? `${prev}\n\n[AI Caption]: ${aiSuggestions.description}` : aiSuggestions.description!);
+    }
+
+    setAiApplied(true);
+  };
+
   const handleStartArchiving = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
@@ -271,6 +514,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           setArchiveProgress(100);
           const finalImg = filePreviewUrl || singleImageUrl || 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800';
 
+          const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
+
           const newMem: MemoryItem = {
             id: `mem-${Date.now()}`,
             title,
@@ -282,7 +527,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             description: description || 'Encrypted memory preserved permanently on Arweave permaweb.',
             encryptionLevel,
             permawebTxId: tx.id,
-            tags: tags.split(',').map(t => t.trim()).filter(Boolean)
+            tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+            people: peopleArr.length > 0 ? peopleArr : undefined,
+            autoTags: aiSuggestions ? {
+              category: aiSuggestions.category,
+              people: aiSuggestions.people,
+              location: aiSuggestions.location,
+              tags: aiSuggestions.tags
+            } : undefined
           };
 
           onAddMemory(newMem);
@@ -355,6 +607,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             })
           });
 
+          const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
+
           createdMemories.push({
             id: `mem-${Date.now()}-${idx}`,
             title: itemTitle,
@@ -367,7 +621,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             encryptionLevel,
             permawebTxId: tx.id,
             tags: [...tags.split(',').map(t => t.trim()).filter(Boolean), 'Album'],
-            albumName: title
+            albumName: title,
+            people: peopleArr.length > 0 ? peopleArr : undefined,
+            autoTags: aiSuggestions ? {
+              category: aiSuggestions.category,
+              people: aiSuggestions.people,
+              location: aiSuggestions.location,
+              tags: aiSuggestions.tags
+            } : undefined
           });
         }
 
@@ -381,9 +642,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         }, 1000);
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error archiving to Arweave:', err);
       setArchiveProgress(100);
+      triggerGlobalArweaveAlert({
+        type: 'timeout',
+        itemTitle: title || 'Memory Asset',
+        errorMsg: err?.message || 'Arweave permaweb upload request timed out or connection was disrupted.'
+      });
     }
   };
 
@@ -432,7 +698,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="bg-[#120B21] p-1.5 rounded-2xl border border-[#DFB260]/40 flex items-center justify-between text-xs font-semibold">
+          <div className="bg-[#120B21] p-1.5 rounded-2xl border border-[#DFB260]/40 flex items-center justify-between text-xs font-semibold gap-1.5 flex-wrap sm:flex-nowrap">
             <button
               type="button"
               onClick={() => setUploadMode('single')}
@@ -443,7 +709,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>Single Item Upload</span>
+              <span>Single File</span>
             </button>
 
             <button
@@ -456,8 +722,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FolderPlus className="w-4 h-4" />
-              <span>Batch Album Upload</span>
+              <span>Batch Album</span>
             </button>
+
+            {onOpenVideoRecorder && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenVideoRecorder();
+                }}
+                className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center space-x-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold transition-all cursor-pointer shadow-md border border-amber-400/40"
+              >
+                <Camera className="w-4 h-4 text-amber-200 animate-pulse" />
+                <span>Live Record</span>
+              </button>
+            )}
           </div>
 
           {/* Mode Banner Explanation */}
@@ -743,10 +1023,294 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               )}
             </div>
 
+            {/* AI AUTO-TAGGING TRIGGER BUTTON & REAL-TIME PROGRESS INDICATOR */}
+            <div className="bg-[#120B21]/90 p-4 rounded-2xl border border-[#DFB260]/40 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 rounded-lg bg-[#DFB260]/20 text-[#F5D77F] border border-[#DFB260]/40">
+                    <Wand2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-cinzel font-bold text-[#FFF2A8] text-sm block">AI Photo &amp; Video Auto-Tagging</span>
+                    <span className="text-[10px] text-[#C8B1E4]/80 font-mono block">Analyze media for people, locations &amp; categorical metadata</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleRunAIAutoTag()}
+                  disabled={isAnalyzingAI}
+                  className="gold-filled-btn text-xs px-4 py-2 font-bold uppercase tracking-wider flex items-center space-x-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                >
+                  {isAnalyzingAI ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#120B21]" />
+                      <span>Auto-Tagging...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 text-[#120B21]" />
+                      <span>⚡ Run AI Auto-Tag</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* REAL-TIME AI AUTO-TAGGING VISUAL STATUS INDICATOR */}
+              {isAnalyzingAI && (
+                <div className="bg-[#0A0514] p-4 rounded-xl border border-[#DFB260] space-y-3 shadow-2xl animate-fade-in relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs relative z-10">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-4 h-4 text-[#F5D77F] animate-spin" />
+                      <span className="font-cinzel font-bold text-[#FFF2A8] text-xs uppercase tracking-wider">
+                        Gemini AI Media Auto-Tagging
+                      </span>
+                    </div>
+                    <span className="font-mono text-[#F5D77F] font-bold text-xs bg-[#DFB260]/20 px-2.5 py-0.5 rounded-full border border-[#DFB260]/40">
+                      {aiProgress}%
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full h-2.5 bg-[#120B21] rounded-full overflow-hidden border border-[#DFB260]/30 relative z-10">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#DFB260] via-[#F5D77F] to-[#FFF2A8] transition-all duration-300 ease-out shadow-[0_0_12px_rgba(223,178,96,0.8)]"
+                      style={{ width: `${aiProgress}%` }}
+                    />
+                  </div>
+
+                  {/* 3 Step Badges */}
+                  <div className="grid grid-cols-3 gap-2 pt-1 relative z-10 text-[10px]">
+                    <div className={`p-2 rounded-xl border flex flex-col items-center text-center space-y-1 transition-all ${
+                      aiStep >= 1 ? 'bg-[#DFB260]/20 border-[#DFB260] text-[#FFF2A8]' : 'bg-[#120B21]/50 border-gray-800 text-gray-500'
+                    }`}>
+                      <Users className={`w-3.5 h-3.5 ${aiStep === 1 ? 'text-[#F5D77F] animate-bounce' : 'text-[#DFB260]'}`} />
+                      <span className="font-bold leading-tight">1. Faces &amp; People</span>
+                    </div>
+
+                    <div className={`p-2 rounded-xl border flex flex-col items-center text-center space-y-1 transition-all ${
+                      aiStep >= 2 ? 'bg-[#DFB260]/20 border-[#DFB260] text-[#FFF2A8]' : 'bg-[#120B21]/50 border-gray-800 text-gray-500'
+                    }`}>
+                      <MapPin className={`w-3.5 h-3.5 ${aiStep === 2 ? 'text-[#F5D77F] animate-bounce' : 'text-[#DFB260]'}`} />
+                      <span className="font-bold leading-tight">2. Location &amp; Geodata</span>
+                    </div>
+
+                    <div className={`p-2 rounded-xl border flex flex-col items-center text-center space-y-1 transition-all ${
+                      aiStep >= 3 ? 'bg-[#DFB260]/20 border-[#DFB260] text-[#FFF2A8]' : 'bg-[#120B21]/50 border-gray-800 text-gray-500'
+                    }`}>
+                      <Tag className={`w-3.5 h-3.5 ${aiStep === 3 ? 'text-[#F5D77F] animate-bounce' : 'text-[#DFB260]'}`} />
+                      <span className="font-bold leading-tight">3. Categorical Tags</span>
+                    </div>
+                  </div>
+
+                  {/* Status Log */}
+                  <div className="bg-[#120B21] p-2 rounded-lg border border-[#DFB260]/30 text-[10px] font-mono text-[#F5D77F] flex items-center justify-between relative z-10">
+                    <span className="truncate">{aiStepStatusText}</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0 ml-2"></span>
+                  </div>
+                </div>
+              )}
+
+              {/* AI SUGGESTIONS DISPLAY */}
+              {aiSuggestions && !isAnalyzingAI && (
+                <div className="bg-[#1A0C33] p-3.5 rounded-xl border border-[#DFB260]/50 space-y-2.5 animate-fade-in text-xs">
+                  <div className="flex items-center justify-between border-b border-[#DFB260]/20 pb-2">
+                    <span className="font-mono text-[10px] uppercase font-bold text-[#F5D77F] flex items-center gap-1">
+                      <Bot className="w-3.5 h-3.5 text-[#F5D77F]" />
+                      <span>Gemini AI Memory Insights</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleApplyAISuggestions}
+                      className={`px-3 py-1 rounded-lg font-bold text-[11px] uppercase tracking-wider cursor-pointer flex items-center space-x-1 transition-all ${
+                        aiApplied
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-[#DFB260] text-[#120B21] hover:bg-[#F5D77F] shadow'
+                      }`}
+                    >
+                      {aiApplied ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>AI Tags Applied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3 h-3" />
+                          <span>Apply AI Tags to Form</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-[#C8B1E4]/70 font-mono block">Category:</span>
+                      <span className="text-[#FFF2A8] font-bold">{aiSuggestions.category || category}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#C8B1E4]/70 font-mono block">Location:</span>
+                      <span className="text-[#FFF2A8] font-bold">📍 {aiSuggestions.location || location || 'Detected'}</span>
+                    </div>
+                  </div>
+
+                  {aiSuggestions.people && aiSuggestions.people.length > 0 && (
+                    <div>
+                      <span className="text-[#C8B1E4]/70 font-mono block mb-1">Detected / Suggested People:</span>
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        {aiSuggestions.people.map(p => (
+                          <span key={p} className="px-2 py-0.5 rounded-full bg-[#DFB260]/20 text-[#FFF2A8] border border-[#DFB260]/40 font-semibold flex items-center gap-1 text-[10px]">
+                            <Users className="w-2.5 h-2.5 text-[#F5D77F]" />
+                            <span>{p}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiSuggestions.tags && aiSuggestions.tags.length > 0 && (
+                    <div>
+                      <span className="text-[#C8B1E4]/70 font-mono block mb-1">Suggested Memory Tags:</span>
+                      <div className="flex items-center space-x-1 flex-wrap gap-y-1">
+                        {aiSuggestions.tags.map(t => (
+                          <span key={t} className="px-2 py-0.5 rounded bg-[#120B21] text-[#F5D77F] border border-[#DFB260]/30 font-mono text-[10px]">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiSuggestions.description && (
+                    <div className="pt-1 text-[11px] text-[#C8B1E4] italic border-t border-[#DFB260]/20">
+                      "{aiSuggestions.description}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* People Featured Input */}
+            <div>
+              <label className="block text-[#FFF2A8] font-semibold mb-1 flex items-center space-x-1.5">
+                <Users className="w-3.5 h-3.5 text-[#F5D77F]" />
+                <span>People Featured (comma separated)</span>
+              </label>
+              <input
+                type="text"
+                value={people}
+                onChange={(e) => setPeople(e.target.value)}
+                placeholder="e.g. Wayne, Clara Pendelton, Grandfather Edward"
+                className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium transition-all"
+              />
+            </div>
+
+            {/* SPOKEN VOICE RECORDING & AI TRANSCRIPTION FOR TIME CAPSULES & MEMORIES */}
+            <div className="bg-[#120B21]/90 p-4 rounded-2xl border border-[#DFB260]/40 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <Mic className="w-4 h-4 text-amber-300" />
+                  </div>
+                  <div>
+                    <span className="font-cinzel font-bold text-[#FFF2A8] text-xs block">
+                      Record Spoken Voice Memory &amp; AI Transcribe
+                    </span>
+                    <span className="text-[10px] text-[#C8B1E4]/80 font-mono block">
+                      Record voice stories directly — transcribed automatically into written story text by Gemini AI
+                    </span>
+                  </div>
+                </div>
+
+                {!isRecordingAudio && !audioDataUrl && (
+                  <button
+                    type="button"
+                    onClick={startAudioRecording}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5 cursor-pointer shadow"
+                  >
+                    <Mic className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                    <span>Record Voice</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Active Recording State */}
+              {isRecordingAudio && (
+                <div className="bg-[#0A0514] p-3 rounded-xl border border-rose-500/50 flex items-center justify-between gap-3 animate-pulse">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-rose-500 animate-ping"></div>
+                    <span className="font-mono text-rose-300 font-bold text-xs uppercase">
+                      Recording Voice Story... {Math.floor(audioRecordingTime / 60)}:{String(audioRecordingTime % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={stopAudioRecording}
+                    className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Square className="w-3 h-3" />
+                    <span>Stop Recording</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Recorded Audio Controls & Transcribe Action */}
+              {audioDataUrl && !isRecordingAudio && (
+                <div className="bg-[#0A0514] p-3 rounded-xl border border-[#DFB260]/40 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2 text-[#F5D77F] font-semibold">
+                      <Volume2 className="w-4 h-4 text-[#F5D77F]" />
+                      <span>Spoken Voice Recording Captured ({audioRecordingTime}s)</span>
+                    </div>
+
+                    <div className="flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={togglePlayAudio}
+                        className="px-2.5 py-1 rounded-lg bg-[#DFB260]/20 hover:bg-[#DFB260]/30 text-[#FFF2A8] border border-[#DFB260]/30 text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
+                      >
+                        {isPlayingRecordedAudio ? <Pause className="w-3 h-3 text-[#F5D77F]" /> : <Play className="w-3 h-3 text-[#F5D77F]" />}
+                        <span>{isPlayingRecordedAudio ? 'Pause' : 'Play Audio'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={resetAudioRecording}
+                        className="p-1 rounded-lg text-rose-300 hover:bg-rose-950/50 cursor-pointer"
+                        title="Re-record Audio"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleTranscribeAudio}
+                      disabled={isTranscribingAudio}
+                      className="gold-filled-btn text-xs px-4 py-2 font-bold uppercase tracking-wider flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isTranscribingAudio ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#120B21]" />
+                          <span>AI Transcribing Voice Story...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-[#120B21]" />
+                          <span>⚡ AI Transcribe to Story</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Story / Description */}
             <div>
               <label className="block text-[#FFF2A8] font-semibold mb-1">
-                {uploadMode === 'album' ? 'Shared Album Story / Context' : 'Story / Description'}
+                {uploadMode === 'album' ? 'Shared Album Story / Transcribed Voice Context' : 'Story / Transcribed Voice Description'}
               </label>
               <textarea
                 rows={2}

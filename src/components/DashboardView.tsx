@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ViewMode, MemoryItem, UserProfile, MemorialShrine, Heir } from '../types';
 import { LegacyMilestoneTimeline } from './LegacyMilestoneTimeline';
+import { StorageUsageDashboard } from './StorageUsageDashboard';
 import { 
   Plus, 
   Database, 
@@ -23,12 +24,15 @@ import {
   Shield,
   Trash2,
   RotateCcw,
-  FileText
+  FileText,
+  Video,
+  Camera
 } from 'lucide-react';
 
 interface DashboardViewProps {
   onSelectView: (view: ViewMode) => void;
   onOpenUpload: () => void;
+  onOpenVideoRecorder?: () => void;
   onOpenConcierge: () => void;
   memories: MemoryItem[];
   memorials?: MemorialShrine[];
@@ -41,6 +45,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectView,
   onOpenUpload,
+  onOpenVideoRecorder,
   onOpenConcierge,
   memories,
   memorials = [],
@@ -108,6 +113,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="relative z-10 flex flex-wrap items-center gap-3">
+          {onOpenVideoRecorder && (
+            <button
+              id="btn-dashboard-record-video"
+              onClick={onOpenVideoRecorder}
+              className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-xs px-5 py-3.5 rounded-2xl flex items-center space-x-2 cursor-pointer shadow-[0_0_20px_rgba(244,63,94,0.35)] transition-transform active:scale-95 border border-amber-300/40"
+            >
+              <Video className="w-4 h-4 text-amber-200 animate-pulse" />
+              <span>Live Record</span>
+            </button>
+          )}
+
           <button
             id="btn-dashboard-new-entry"
             onClick={onOpenUpload}
@@ -359,66 +375,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onSelectView={onSelectView}
       />
 
-      {/* Main Content Grid: Storage Progress & AI Concierge */}
+      {/* D3 Storage Usage Dashboard Component */}
+      <StorageUsageDashboard memories={memories} />
+
+      {/* Main Content Grid: AI Concierge & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left 2 Columns: Storage Progress & Zone Cards */}
-        <div className="lg:col-span-2 space-y-8">
-          
-          {/* Storage Meter Card */}
-          <div id="card-storage-meter" className="cosmic-card p-6 sm:p-8 space-y-5 relative shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-[#DFB260]/20 border border-[#DFB260]/40 text-[#FFF2A8] rounded-2xl flex items-center justify-center">
-                  <HardDrive className="w-6 h-6 text-[#F5D77F]" />
-                </div>
-                <div>
-                  <h3 className="text-base font-cinzel font-bold text-[#FFF2A8]">Vault Storage Capacity</h3>
-                  <p className="text-xs text-[#C8B1E4]/80">
-                    {memories.length > 0
-                      ? `${(memories.length * 155 / 1000).toFixed(2)} TB of 5.00 TB allocated across Arweave permaweb`
-                      : '0.00 GB of 5.00 TB allocated across Arweave permaweb'}
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-mono font-semibold px-3.5 py-1.5 rounded-full bg-[#DFB260]/20 border border-[#DFB260]/40 text-[#FFF2A8]">
-                {memories.length > 0
-                  ? `${((memories.length * 155 / 5000) * 100).toFixed(1)}% Full`
-                  : '0.0% Full'}
+        {/* Left 2 Columns: Zone Summary & Quick Paths */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="cosmic-card p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#DFB260]/20 pb-3">
+              <h3 className="font-cinzel font-bold text-lg text-[#FFF2A8]">Permaweb Replication Status</h3>
+              <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/20 px-2.5 py-1 rounded-full border border-emerald-500/40">
+                100% HEALTHY
               </span>
             </div>
-
-            {/* Capacity Progress Bar */}
-            <div className="w-full bg-[#120B21] rounded-full h-3.5 p-0.5 overflow-hidden border border-[#DFB260]/30">
-              <div 
-                className="bg-gradient-to-r from-[#FFF2A8] via-[#F5D77F] to-[#DFB260] h-full rounded-full transition-all duration-500"
-                style={{
-                  width: memories.length > 0 
-                    ? `${Math.min(100, Math.max(2, (memories.length * 155 / 5000) * 100)).toFixed(1)}%` 
-                    : '0%'
-                }}
-              ></div>
-            </div>
-
-            {/* Storage Category Badges */}
-            <div className="grid grid-cols-3 gap-3 pt-2 text-xs font-sans">
-              <div className="flex items-center justify-between p-3 bg-[#1A0C33] rounded-2xl border border-[#DFB260]/20">
-                <span className="text-[#C8B1E4] font-semibold text-[11px] uppercase tracking-wider">MEMORIES</span>
-                <span className="text-[#FFF2A8] font-mono font-bold">
-                  {memories.length > 0 ? `${Math.round(memories.length * 105)} GB` : '0 GB'}
-                </span>
+            <p className="text-xs text-[#C8B1E4] leading-relaxed">
+              All media items, spoken audio transcripts, legal deeds, and time capsule letters are encrypted client-side using AES-256 and pinned across Arweave permaweb nodes.
+            </p>
+            <div className="grid grid-cols-3 gap-3 pt-2 text-xs font-mono text-center">
+              <div className="p-3 bg-[#0A0514] rounded-xl border border-[#DFB260]/20">
+                <span className="text-[#C8B1E4] block text-[10px]">CONSENSUS</span>
+                <span className="text-[#FFF2A8] font-bold">24 NODES</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-[#1A0C33] rounded-2xl border border-[#DFB260]/20">
-                <span className="text-[#C8B1E4] font-semibold text-[11px] uppercase tracking-wider">LEGAL</span>
-                <span className="text-[#FFF2A8] font-mono font-bold">
-                  {memories.length > 0 ? '12 GB' : '0 GB'}
-                </span>
+              <div className="p-3 bg-[#0A0514] rounded-xl border border-[#DFB260]/20">
+                <span className="text-[#C8B1E4] block text-[10px]">ENCRYPTION</span>
+                <span className="text-[#FFF2A8] font-bold">AES-256-GCM</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-[#1A0C33] rounded-2xl border border-[#DFB260]/20">
-                <span className="text-[#C8B1E4] font-semibold text-[11px] uppercase tracking-wider">VIDEO LOGS</span>
-                <span className="text-[#FFF2A8] font-mono font-bold">
-                  {memories.length > 0 ? `${Math.round(memories.length * 48)} GB` : '0 GB'}
-                </span>
+              <div className="p-3 bg-[#0A0514] rounded-xl border border-[#DFB260]/20">
+                <span className="text-[#C8B1E4] block text-[10px]">LIFESPAN</span>
+                <span className="text-emerald-400 font-bold">PERPETUAL</span>
               </div>
             </div>
           </div>

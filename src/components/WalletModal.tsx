@@ -25,6 +25,9 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     }
   }, [isOpen]);
 
+  const [isUploadingJwk, setIsUploadingJwk] = useState(false);
+  const [jwkMessage, setJwkMessage] = useState<string | null>(null);
+
   const fetchNodeStatus = async () => {
     setIsLoadingNode(true);
     try {
@@ -44,12 +47,35 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     }
   };
 
-  const handleKeyfileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleKeyfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setKeyfileName(file.name);
-      if (!walletState.isConnected) {
-        onToggleConnect();
+      setIsUploadingJwk(true);
+      setJwkMessage(null);
+
+      try {
+        const text = await file.text();
+        const res = await fetch('/api/arweave/import-jwk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jwk: text })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setJwkMessage(`JWK Linked! Address: ${data.address.slice(0, 8)}... (${data.balanceAr} AR)`);
+          fetchNodeStatus();
+          if (!walletState.isConnected) {
+            onToggleConnect();
+          }
+        } else {
+          setJwkMessage(`JWK Import Error: ${data.error || data.details || 'Invalid key'}`);
+        }
+      } catch (err: any) {
+        setJwkMessage(`Import failed: ${err.message}`);
+      } finally {
+        setIsUploadingJwk(false);
       }
     }
   };
@@ -135,11 +161,17 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             />
             <div className="flex items-center justify-center space-x-1.5 text-xs font-semibold text-[#FFF2A8]">
               <KeyRound className="w-3.5 h-3.5 text-[#F5D77F]" />
-              <span>{keyfileName ? `Loaded: ${keyfileName}` : 'Load Arweave JWK Keyfile JSON'}</span>
+              <span>{isUploadingJwk ? 'Linking JWK Key...' : keyfileName ? `Loaded: ${keyfileName}` : 'Load Arweave JWK Keyfile JSON'}</span>
             </div>
-            <p className="text-[10px] text-[#C8B1E4]/70 mt-0.5">Loads local RSA 4096-bit wallet key without server storage</p>
+            <p className="text-[10px] text-[#C8B1E4]/70 mt-0.5">Loads local RSA 4096-bit wallet key &amp; enables mainnet broadcast</p>
           </label>
         </div>
+
+        {jwkMessage && (
+          <div className="p-2.5 rounded-xl bg-[#080312] border border-[#DFB260]/30 text-[11px] font-mono text-[#F5D77F]">
+            {jwkMessage}
+          </div>
+        )}
 
         {/* Action Button */}
         <button

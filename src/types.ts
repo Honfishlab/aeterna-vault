@@ -8,7 +8,8 @@ export type ViewMode =
   | 'memorials' 
   | 'locker'
   | 'inheritance'
-  | 'immortal';
+  | 'immortal'
+  | 'audit';
 
 export interface Heir {
   id: string;
@@ -40,12 +41,21 @@ export interface MemoryItem {
   time?: string;
   location?: string;
   imageUrl?: string;
+  videoUrl?: string;
+  mediaType?: 'photo' | 'video' | 'document';
   description: string;
   encryptionLevel: 'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof';
   permawebTxId: string;
   tags: string[];
+  people?: string[];
   albumName?: string;
   isCoverPhoto?: boolean;
+  autoTags?: {
+    category?: string;
+    people?: string[];
+    location?: string;
+    tags?: string[];
+  };
 }
 
 export interface LegacyLetter {
@@ -58,17 +68,59 @@ export interface LegacyLetter {
   attachmentsCount: number;
   heirsCount: number;
   arweaveId: string;
+  audioUrl?: string;
+  isAudioRecording?: boolean;
+}
+
+export interface TributeNote {
+  id: string;
+  author: string;
+  relationship: string;
+  message: string;
+  date: string;
+  imageUrl?: string;
+  audioUrl?: string;
+  isAudioTribute?: boolean;
+  transcription?: string;
+  tributeType?: 'Candle & Prayer' | 'Flower Tribute' | 'Family Memory' | 'Honor & Gratitude' | 'Spoken Story (Audio AI)';
+}
+
+export interface LifeMilestone {
+  id?: string;
+  year: string;
+  dateExact?: string;
+  title: string;
+  description: string;
+  location?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  mediaType?: 'photo' | 'video' | 'audio' | 'story';
+  category?: 'Birth' | 'Education' | 'Career' | 'Marriage & Family' | 'Achievement' | 'Travel & Adventure' | 'Legacy & Memorial';
+  tags?: string[];
+  quotes?: string;
 }
 
 export interface MemorialShrine {
   id: string;
   name: string;
+  bornDate?: string;
+  passedDate?: string;
   years: string;
   relationship: string;
   imageUrl: string;
+  coverImageUrl?: string;
+  restingPlace?: string;
   tributesCount: number;
+  candlesLitCount?: number;
+  flowersOfferedCount?: number;
   candleLitToday: boolean;
   motto: string;
+  biography?: string;
+  keyValues?: string[];
+  favoriteQuotes?: string[];
+  lifeMilestones?: LifeMilestone[];
+  tributes?: TributeNote[];
 }
 
 export interface ChatMessage {
