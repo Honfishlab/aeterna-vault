@@ -234,6 +234,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onWheel={(e) => { e.preventDefault(); changeZoom(zoom + (e.deltaY < 0 ? 0.2 : -0.2)); }}
           onDoubleClick={(e) => { e.stopPropagation(); zoom > 1 ? resetView() : changeZoom(2); }}
           onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest('button, a')) return;
             if (zoom <= 1) return;
             e.currentTarget.setPointerCapture(e.pointerId);
             dragStartRef.current = { x: e.clientX, y: e.clientY, originX: position.x, originY: position.y };
@@ -274,6 +275,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           {/* PREVIOUS & NEXT NAV BUTTONS */}
           {hasPrev && onPrev && (
             <button
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onPrev();
@@ -287,6 +289,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
           {hasNext && onNext && (
             <button
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onNext();
@@ -301,7 +304,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           {images.length > 1 && !showInfo && (
             <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 max-w-[80vw] overflow-x-auto rounded-2xl bg-black/65 border border-white/15 p-2 backdrop-blur-xl flex gap-2">
               {images.map((item, index) => (
-                <button key={item.id || item.imageUrl} onClick={() => onSelectImage?.(item)} className="relative flex-none w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden border-2 opacity-75 hover:opacity-100 transition-all" style={{ borderColor: item.id === image.id ? "#F5D77F" : "transparent" }} title={String(index + 1) + ". " + item.title}>
+                <button key={item.id || item.imageUrl} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSelectImage?.(item); }} className="relative flex-none w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden border-2 opacity-75 hover:opacity-100 transition-all" style={{ borderColor: item.id === image.id ? "#F5D77F" : "transparent" }} title={String(index + 1) + ". " + item.title}>
                   <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
