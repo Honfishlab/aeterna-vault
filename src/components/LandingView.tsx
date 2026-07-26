@@ -50,7 +50,7 @@ interface VideoScene {
   };
 }
 
-const HERO_BG_IMAGE = '/aeterna-vault-hero-1.jpg';
+const HERO_BG_IMAGE = '/aeterna-vault-hero-export.jpg';
 
 const VIDEO_SCENES: VideoScene[] = [
   {
@@ -205,7 +205,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
             className="w-full h-full object-cover object-center scale-100 opacity-95 transition-all duration-700"
             referrerPolicy="no-referrer"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+              (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[#080312]/70 via-[#080312]/20 to-[#080312]/40 pointer-events-none"></div>
@@ -238,7 +238,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 alt={item.title} 
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
                 }}
                 className="w-full h-full object-cover rounded-xl"
               />
@@ -395,7 +395,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 alt="Photos stay meaningful"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-85"
               />
@@ -419,7 +419,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 alt="Videos become searchable"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-85"
               />
@@ -443,7 +443,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 alt="Time capsules wait"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-85"
               />
@@ -500,7 +500,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 alt={currentScene.title}
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-1.jpg';
+                  (e.target as HTMLImageElement).src = '/aeterna-vault-hero-export.jpg';
                 }}
                 className={`w-full h-full object-cover transition-all duration-1000 ${isPlaying ? 'scale-105 opacity-90' : 'scale-100 opacity-70'}`}
               />
