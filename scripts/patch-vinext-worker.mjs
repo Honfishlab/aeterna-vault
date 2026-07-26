@@ -31,7 +31,7 @@ await build({
   bundle: true,
   format: 'esm',
   platform: 'neutral',
-  external: ['node:*'],
+  external: ['node:*', 'pg'],
   outfile: bundledSsrEntry,
 });
 fs.renameSync(bundledSsrEntry, ssrEntry);

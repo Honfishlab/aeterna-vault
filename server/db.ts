@@ -1,24 +1,28 @@
-import { neon } from "@neondatabase/serverless";
-
 export type DbRow = Record<string, unknown>;
+
+let poolPromise: Promise<any> | null = null;
 
 export function databaseConfigured() {
   return Boolean(process.env.DATABASE_URL);
 }
 
-function client() {
+async function client() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_NOT_CONFIGURED");
-  return neon(url);
+  if (!poolPromise) {
+    const packageName = "pg";
+    poolPromise = import(/* @vite-ignore */ packageName).then(({ Pool }) => new Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30000 }));
+  }
+  return poolPromise;
 }
 
 export async function query<T = DbRow>(text: string, params: unknown[] = []) {
-  const result = await client().query(text, params);
-  return result as T[];
+  const result = await (await client()).query(text, params);
+  return result.rows as T[];
 }
 
 export async function execute(text: string, params: unknown[] = []) {
-  await client().query(text, params);
+  await (await client()).query(text, params);
 }
 
 export function databaseError(error: unknown) {
