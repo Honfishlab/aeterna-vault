@@ -35,6 +35,10 @@ await build({
   outfile: bundledSsrEntry,
 });
 fs.renameSync(bundledSsrEntry, ssrEntry);
+const bundledSsr = fs.readFileSync(ssrEntry, 'utf8');
+const workerSsr = bundledSsr.replaceAll('O2(`react-dom`)', 'require_react_dom()');
+if (workerSsr === bundledSsr) throw new Error('Bundled SSR React DOM require was not found.');
+fs.writeFileSync(ssrEntry, workerSsr);
 const entry = path.join(root, 'index.js');
 const handler = path.join(root, 'vinext-handler.js');
 fs.renameSync(entry, handler);
