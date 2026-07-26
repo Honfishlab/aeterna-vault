@@ -5,7 +5,7 @@ services:
     plan: starter
     repo: https://github.com/Honfishlab/aeterna-vault.git
     branch: main
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install --no-audit --no-fund && npm run build
     preDeployCommand: npm run db:migrate
     startCommand: npm start -- --port $PORT
     healthCheckPath: /api/health
