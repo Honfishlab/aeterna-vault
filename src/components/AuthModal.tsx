@@ -51,7 +51,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [signUpName, setSignUpName] = useState('');
   
   // Email Form State
-  const [email, setEmail] = useState('wayne@honolulufish.com');
+  const [email, setEmail] = useState('');
   const [passcode, setPasscode] = useState('');
   const [role, setRole] = useState<'Vault Owner' | 'Trustee' | 'Heir / Beneficiary'>('Vault Owner');
   

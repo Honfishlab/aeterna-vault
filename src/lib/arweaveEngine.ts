@@ -159,6 +159,9 @@ export async function createPermawebTransaction(params: {
   let reward = (sizeBytes * 0.00000021).toFixed(6);
 
   try {
+    const sessionJwk = typeof window !== 'undefined'
+      ? sessionStorage.getItem('aeterna_arweave_jwk')
+      : null;
     const res = await fetch('/api/arweave/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -169,7 +172,8 @@ export async function createPermawebTransaction(params: {
         encryptionLevel: params.encryptionLevel,
         dataHash,
         payloadBase64,
-        sizeBytes
+        sizeBytes,
+        jwk: sessionJwk || undefined
       })
     });
 
@@ -183,6 +187,8 @@ export async function createPermawebTransaction(params: {
       }
       if (body.status === 'SEALED_ON_PERMAWEB') {
         status = 'SEALED_ON_CHAIN';
+      } else {
+        status = 'PENDING';
       }
     }
   } catch (err) {

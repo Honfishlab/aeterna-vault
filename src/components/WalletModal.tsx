@@ -64,6 +64,8 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
         const data = await res.json();
         if (res.ok && data.success) {
+          // Keep the signing key only for this browser tab.
+          sessionStorage.setItem('aeterna_arweave_jwk', text);
           setJwkMessage(`JWK Linked! Address: ${data.address.slice(0, 8)}... (${data.balanceAr} AR)`);
           fetchNodeStatus();
           if (!walletState.isConnected) {

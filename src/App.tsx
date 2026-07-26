@@ -23,32 +23,24 @@ import { VaultExportModal } from './components/VaultExportModal';
 import { NotificationProvider } from './components/NotificationSystem';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewMode>('landing');
   const [searchQuery, setSearchQuery] = useState('');
   
   // User Authentication State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const saved = localStorage.getItem('aeterna_user_profile');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error('Failed to parse saved user profile', e);
     }
-    // Default active user session
-    return {
-      id: 'usr_default_owner',
-      name: 'Wayne',
-      email: 'wayne@honolulufish.com',
-      role: 'Vault Owner',
-      authMethod: 'Email & Passcode',
-      walletAddress: '0x71C92a4f9a72b0c3d4E691',
-      signedInAt: '09:42 AM',
-      securityLevel: 'Quantum-Proof AES-GCM'
-    };
+    return null;
   });
 
   // App State collections initialized with persistent localStorage support
   const [memories, setMemories] = useState<MemoryItem[]>(() => {
+    if (typeof window === 'undefined') return INITIAL_MEMORIES;
     try {
       if (localStorage.getItem('aeterna_demo_cleared') === 'true') {
         const saved = localStorage.getItem('aeterna_memories');
@@ -62,6 +54,7 @@ export default function App() {
   });
 
   const [letters, setLetters] = useState<LegacyLetter[]>(() => {
+    if (typeof window === 'undefined') return INITIAL_LETTERS;
     try {
       if (localStorage.getItem('aeterna_demo_cleared') === 'true') {
         const saved = localStorage.getItem('aeterna_letters');
@@ -75,6 +68,7 @@ export default function App() {
   });
 
   const [memorials, setMemorials] = useState<MemorialShrine[]>(() => {
+    if (typeof window === 'undefined') return INITIAL_MEMORIALS;
     try {
       if (localStorage.getItem('aeterna_demo_cleared') === 'true') {
         return [];
@@ -87,6 +81,7 @@ export default function App() {
   });
 
   const [heirs, setHeirs] = useState<Heir[]>(() => {
+    if (typeof window === 'undefined') return INITIAL_HEIRS;
     try {
       if (localStorage.getItem('aeterna_demo_cleared') === 'true') {
         return [];
@@ -100,7 +95,7 @@ export default function App() {
 
   const [triggerConfig, setTriggerConfig] = useState<InheritanceTriggerConfig>(INITIAL_TRIGGER_CONFIG);
 
-  // Async hydration from server persistent store & IndexedDB vault storage
+  // Hydrate the local-first vault from IndexedDB. Vault contents never enter a shared server-side store.
   useEffect(() => {
     async function hydrateFromVault() {
       const isDemoCleared = localStorage.getItem('aeterna_demo_cleared') === 'true';
@@ -455,8 +450,8 @@ export default function App() {
             onSignInAsDemo={() => {
               handleSignIn({
                 id: 'usr_demo_guest',
-                name: 'Wayne',
-                email: 'wayne@honolulufish.com',
+                name: 'Demo Owner',
+                email: 'demo@aeterna.local',
                 role: 'Vault Owner',
                 authMethod: 'Email & Passcode',
                 walletAddress: '0x71C92a4f9a72b0c3d4E691',
