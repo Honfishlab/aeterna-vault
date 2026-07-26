@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
+    "build": "vinext build && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json",
     "start": "vinext start",
     "clean": "rm -rf dist .vinext .vite",
     "lint": "tsc --noEmit"
