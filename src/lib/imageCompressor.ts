@@ -6,7 +6,12 @@
 export function compressImageFile(file: File, maxDimension = 1920, quality = 0.85): Promise<string> {
   return new Promise((resolve) => {
     // If file is not an image or is already small (< 250KB), read directly
-    if (!file.type.startsWith('image/') || file.size < 250 * 1024) {
+    if (!file.type.startsWith('image/')) {
+      resolve(URL.createObjectURL(file));
+      return;
+    }
+
+    if (file.size < 250 * 1024) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string || '');
       reader.onerror = () => resolve('');

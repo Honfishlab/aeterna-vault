@@ -7,6 +7,7 @@ import {
 } from '../lib/arweaveEngine';
 import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
+import { uploadMediaFile } from '../lib/mediaUpload';
 import { 
   Upload, 
   X, 
@@ -459,6 +460,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
     try {
       if (uploadMode === 'single') {
+        let storedMediaUrl: string | null = null;
+        if (selectedFile) {
+          setArchiveStatusText('Uploading original media to private Cloudflare R2 storage...');
+          const stored = await uploadMediaFile(selectedFile, progress => setArchiveProgress(5 + Math.round(progress * 0.25)));
+          storedMediaUrl = stored.mediaUrl;
+        }
         setArchiveStatusText('Encrypting single memory payload...');
         let fileBuffer: ArrayBuffer;
         let contentType = selectedFile ? selectedFile.type : 'image/jpeg';
@@ -512,7 +519,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         setTimeout(() => {
           setArchiveProgress(100);
-          const finalImg = filePreviewUrl || singleImageUrl || 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800';
+          const fallbackImg = 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800';
+          const finalImg = selectedFile?.type.startsWith('image/') ? (storedMediaUrl || filePreviewUrl || fallbackImg) : (singleImageUrl || fallbackImg);
 
           const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
 
@@ -524,6 +532,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             time: time || undefined,
             location: location || 'Sovereign Archive Node',
             imageUrl: finalImg,
+            videoUrl: selectedFile?.type.startsWith('video/') ? (storedMediaUrl || undefined) : undefined,
+            mediaType: selectedFile?.type.startsWith('video/') ? 'video' : selectedFile?.type === 'application/pdf' ? 'document' : 'photo',
             description: description || 'Encrypted memory preserved permanently on Arweave permaweb.',
             encryptionLevel,
             permawebTxId: tx.id,
@@ -563,6 +573,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
           let fileBuffer: ArrayBuffer;
           let contentType = item.file ? item.file.type : 'image/jpeg';
+          let storedMediaUrl = item.previewUrl;
+          if (item.file) {
+            setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
+            const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)));
+            storedMediaUrl = stored.mediaUrl;
+          }
 
           if (item.file) {
             fileBuffer = await item.file.arrayBuffer();
@@ -616,7 +632,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             date: formattedDateString,
             time: time || undefined,
             location: location || 'Sovereign Album Node',
-            imageUrl: item.previewUrl,
+            imageUrl: item.file && !item.file.type.startsWith('image/') ? 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800' : storedMediaUrl,
+            videoUrl: item.file?.type.startsWith('video/') ? storedMediaUrl : undefined,
+            mediaType: item.file?.type.startsWith('video/') ? 'video' : item.file?.type === 'application/pdf' ? 'document' : 'photo',
             description: description || `Preserved in Album "${title}" with ${totalItems} total files.`,
             encryptionLevel,
             permawebTxId: tx.id,

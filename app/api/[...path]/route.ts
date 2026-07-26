@@ -1,5 +1,6 @@
 import { databaseConfigured, databaseError, execute, query } from "../../../server/db";
 import { authenticatedUser, createSession, destroySession, hashPassword, normalizeEmail, toAuthUser, validEmail, validPassword, verifyPassword } from "../../../server/auth";
+import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } from "../../../server/r2";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -120,14 +121,32 @@ export async function GET(request: Request) {
       return json({ data: rows[0]?.data ?? null, revision: Number(rows[0]?.revision || 0) });
     } catch (error) { return json(databaseError(error), 503); }
   }
+  if (route.startsWith("media/") && route.split("/").length === 2) {
+    if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const mediaId = route.split("/")[1];
+      const rows = await query<{ object_key: string; content_type: string; original_name: string }>("SELECT object_key, content_type, original_name FROM media_objects WHERE id = $1 AND user_id = $2 AND status = $3 LIMIT 1", [mediaId, user.id, "ready"]);
+      if (!rows[0]) return json({ error: "Media object not found." }, 404);
+      const { client, GetObjectCommand } = await r2Modules();
+      const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: rows[0].object_key, Range: request.headers.get("range") || undefined }));
+      const responseBody = object.Body?.transformToWebStream ? object.Body.transformToWebStream() : object.Body;
+      const headers = new Headers({ "Content-Type": object.ContentType || rows[0].content_type, "Cache-Control": "private, max-age=300", "Accept-Ranges": "bytes", "Content-Disposition": "inline; filename*=UTF-8''" + encodeURIComponent(rows[0].original_name) });
+      if (object.ContentLength != null) headers.set("Content-Length", String(object.ContentLength));
+      if (object.ContentRange) headers.set("Content-Range", object.ContentRange);
+      if (object.ETag) headers.set("ETag", object.ETag);
+      return new Response(responseBody, { status: object.ContentRange ? 206 : 200, headers });
+    } catch (error) { console.error("R2 media read failed", error); return json({ error: "Media is temporarily unavailable." }, 502); }
+  }
 
   if (route === "health") {
-    if (!databaseConfigured()) return json({ ok: true, service: "aeterna-vault", storage: "local-fallback", databaseConfigured: false, databaseConnected: false, aiConfigured: Boolean(gemini()) });
+    if (!databaseConfigured()) return json({ ok: true, service: "aeterna-vault", storage: "local-fallback", databaseConfigured: false, databaseConnected: false, mediaStorageConfigured: r2Configured(), aiConfigured: Boolean(gemini()) });
     try {
       await query("SELECT 1 AS connected");
-      return json({ ok: true, service: "aeterna-vault", storage: "postgresql", databaseConfigured: true, databaseConnected: true, aiConfigured: Boolean(gemini()) });
+      return json({ ok: true, service: "aeterna-vault", storage: "postgresql", databaseConfigured: true, databaseConnected: true, mediaStorageConfigured: r2Configured(), aiConfigured: Boolean(gemini()) });
     } catch (error) {
-      return json({ ok: false, service: "aeterna-vault", databaseConfigured: true, databaseConnected: false, ...databaseError(error) }, 503);
+      return json({ ok: false, service: "aeterna-vault", databaseConfigured: true, databaseConnected: false, mediaStorageConfigured: r2Configured(), ...databaseError(error) }, 503);
     }
   }
 
@@ -167,7 +186,41 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "media/presign") {
+    if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const name = String(body.name || "").slice(0, 255);
+      const contentType = String(body.contentType || "").toLowerCase();
+      const size = Number(body.size || 0);
+      if (!name || !mediaTypeAllowed(contentType) || !Number.isSafeInteger(size) || size < 1 || size > 100 * 1024 * 1024) return json({ error: "Unsupported media type or file size. Maximum size is 100 MB." }, 400);
+      const mediaId = crypto.randomUUID();
+      const objectKey = user.id + "/" + mediaId + "-" + safeObjectName(name);
+      const { client, PutObjectCommand, getSignedUrl } = await r2Modules();
+      const uploadUrl = await getSignedUrl(client, new PutObjectCommand({ Bucket: r2Bucket(), Key: objectKey, ContentType: contentType }), { expiresIn: 600 });
+      await execute("INSERT INTO media_objects (id, user_id, object_key, original_name, content_type, size_bytes) VALUES ($1, $2, $3, $4, $5, $6)", [mediaId, user.id, objectKey, name, contentType, size]);
+      return json({ mediaId, uploadUrl, mediaUrl: "/api/media/" + mediaId, expiresIn: 600 });
+    } catch (error) { console.error("R2 upload authorization failed", error); return json({ error: "Unable to authorize media upload." }, 502); }
+  }
+
+  if (route === "media/complete") {
+    if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const mediaId = String(body.mediaId || "");
+      const rows = await query<{ object_key: string; size_bytes: number }>("SELECT object_key, size_bytes FROM media_objects WHERE id = $1 AND user_id = $2 AND status = $3 LIMIT 1", [mediaId, user.id, "pending"]);
+      if (!rows[0]) return json({ error: "Pending media upload not found." }, 404);
+      const { client, HeadObjectCommand } = await r2Modules();
+      const object = await client.send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: rows[0].object_key }));
+      if (Number(object.ContentLength || 0) !== Number(rows[0].size_bytes)) return json({ error: "Uploaded file size did not match authorization." }, 409);
+      await execute("UPDATE media_objects SET status = $1, etag = $2, completed_at = NOW() WHERE id = $3 AND user_id = $4", ["ready", object.ETag || null, mediaId, user.id]);
+      return json({ success: true, mediaId, mediaUrl: "/api/media/" + mediaId });
+    } catch (error) { console.error("R2 upload completion failed", error); return json({ error: "Unable to verify media upload." }, 502); }
+  }
 
   if (route === "auth/register") {
     if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
