@@ -3,8 +3,10 @@ import { mediaTypeAllowed, r2Bucket, r2Modules, safeObjectName } from "./r2";
 
 const API = "https://www.googleapis.com/drive/v3";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.readonly"];
-const MAX_BYTES = 100 * 1024 * 1024;
+const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"];
+const MAX_BYTES = 5 * 1024 * 1024 * 1024;
+const BACKGROUND_THRESHOLD = 25 * 1024 * 1024;
+const PHOTOS_API = "https://photospicker.googleapis.com/v1";
 
 const env = (name: string) => process.env[name]?.trim();
 
@@ -121,7 +123,7 @@ interface Connection {
   token_expires_at: string | null;
 }
 
-async function access(userId: string) {
+export async function googleAccess(userId: string) {
   const rows = await query<Connection>("SELECT id,encrypted_access_token,encrypted_refresh_token,token_expires_at FROM media_provider_connections WHERE user_id=$1 AND provider=$2 AND status=$$active$$ ORDER BY updated_at DESC LIMIT 1", [userId, "google-drive"]);
   const row = rows[0];
   if (!row) throw new Error("GOOGLE_DRIVE_NOT_CONNECTED");
@@ -141,7 +143,7 @@ async function access(userId: string) {
 }
 
 export async function listGoogleMedia(userId: string, pageToken?: string | null) {
-  const auth = await access(userId);
+  const auth = await googleAccess(userId);
   const params = new URLSearchParams({
     q: "trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')",
     orderBy: "modifiedTime desc",
@@ -169,7 +171,7 @@ export async function listGoogleMedia(userId: string, pageToken?: string | null)
 }
 
 export async function googleThumbnail(userId: string, fileId: string) {
-  const auth = await access(userId);
+  const auth = await googleAccess(userId);
   const metadataResponse = await fetch(API + "/files/" + encodeURIComponent(fileId) + "?fields=thumbnailLink", { headers: { Authorization: "Bearer " + auth.token } });
   const metadata: any = await metadataResponse.json();
   if (!metadataResponse.ok || !metadata.thumbnailLink) throw new Error("GOOGLE_THUMBNAIL_FAILED");
@@ -179,7 +181,7 @@ export async function googleThumbnail(userId: string, fileId: string) {
 }
 
 export async function importGoogleMedia(userId: string, ids: string[]) {
-  const auth = await access(userId);
+  const auth = await googleAccess(userId);
   const imported: any[] = [];
   const failed: { id: string; error: string }[] = [];
   for (const fileId of Array.from(new Set(ids.map(String))).slice(0, 25)) {

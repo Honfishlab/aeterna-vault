@@ -40,3 +40,9 @@ Configure these Render environment variables:
 - `MEDIA_PROVIDER_TOKEN_KEY` — a private random value of at least 32 characters
 
 The integration requests read-only Drive access. OAuth tokens are AES-GCM encrypted in PostgreSQL, selected images and videos are copied server-side into private R2 storage, and repeated imports reuse the existing vault object.
+
+## Background imports and Google Photos
+
+Enable the Google Photos Picker API in the same Google Cloud project and add `https://www.googleapis.com/auth/photospicker.mediaitems.readonly` to the consent screen Data Access scopes. Existing users must disconnect and reconnect Google once to grant this additional scope.
+
+Set the same private `IMPORT_WORKER_SECRET` value on both the `aeterna-vault` web service and `aeterna-vault-import-worker`. The worker claims PostgreSQL jobs, streams provider downloads into multipart R2 uploads, reports byte progress, and retries failures up to three times.

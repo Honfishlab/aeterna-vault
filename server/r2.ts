@@ -17,8 +17,9 @@ export function r2Bucket() {
 export async function r2Modules() {
   if (!r2Configured()) throw new Error("R2_NOT_CONFIGURED");
   const clientPackage = "@aws-sdk/client-s3";
+  const storagePackage = "@aws-sdk/lib-storage";
   const presignerPackage = "@aws-sdk/s3-request-presigner";
-  const [{ S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand }, { getSignedUrl }] = await Promise.all([import(/* @vite-ignore */ clientPackage), import(/* @vite-ignore */ presignerPackage)]);
+  const [{ S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand }, { getSignedUrl }, { Upload }] = await Promise.all([import(/* @vite-ignore */ clientPackage), import(/* @vite-ignore */ presignerPackage), import(/* @vite-ignore */ storagePackage)]);
   if (!clientPromise) clientPromise = Promise.resolve(new S3Client({
     region: "auto",
     endpoint: "https://" + r2Env("R2_ACCOUNT_ID") + ".r2.cloudflarestorage.com",
@@ -27,7 +28,7 @@ export async function r2Modules() {
       secretAccessKey: r2Env("R2_SECRET_ACCESS_KEY")!,
     },
   }));
-  return { client: await clientPromise, PutObjectCommand, GetObjectCommand, HeadObjectCommand, getSignedUrl };
+  return { client: await clientPromise, PutObjectCommand, GetObjectCommand, HeadObjectCommand, getSignedUrl, Upload };
 }
 
 export function safeObjectName(name: string) {

@@ -31,7 +31,7 @@ await build({
   bundle: true,
   format: 'esm',
   platform: 'neutral',
-  external: ['node:*', 'pg', '@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+  external: ['node:*', 'pg', '@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner', '@aws-sdk/lib-storage'],
   outfile: bundledSsrEntry,
 });
 fs.renameSync(bundledSsrEntry, ssrEntry);

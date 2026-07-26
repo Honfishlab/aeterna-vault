@@ -2,6 +2,8 @@ import { databaseConfigured, databaseError, execute, query } from "../../../serv
 import { authenticatedUser, createSession, destroySession, hashPassword, normalizeEmail, toAuthUser, validEmail, validPassword, verifyPassword } from "../../../server/auth";
 import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } from "../../../server/r2";
 import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogleDrive, googleConnectionStatus, googleDriveConfigured, googleThumbnail, importGoogleMedia, listGoogleMedia } from "../../../server/googleDrive";
+import { createPhotosSession, pollPhotosSession, queuePhotosItems } from "../../../server/googlePhotos";
+import { jobStatus, processNextImportJob, queueDriveJobs } from "../../../server/importJobs";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -114,6 +116,21 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   const route = routeName(request);
 
+  if (route === "import-jobs") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const ids = (new URL(request.url).searchParams.get("ids") || "").split(",").filter(Boolean);
+    return json({ jobs: await jobStatus(user.id, ids) });
+  }
+
+  if (route.startsWith("integrations/google-photos/session/")) {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      return json(await pollPhotosSession(user.id, route.replace("integrations/google-photos/session/", "")));
+    } catch (error: any) { return json({ error: "Google Photos selection is unavailable.", code: error?.message }, 502); }
+  }
+
   if (route === "integrations/google/callback") {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
@@ -219,15 +236,30 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "internal/import-worker") {
+    if (!process.env.IMPORT_WORKER_SECRET || request.headers.get("authorization") !== "Bearer " + process.env.IMPORT_WORKER_SECRET.trim()) return json({ error: "Unauthorized." }, 401);
+    return json({ job: await processNextImportJob() });
+  }
+
+  if (route === "import-jobs/queue-drive" || route === "integrations/google-photos/session" || route === "integrations/google-photos/queue") {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      if (route === "import-jobs/queue-drive") return json(await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : []));
+      if (route === "integrations/google-photos/session") return json(await createPhotosSession(user.id));
+      return json(await queuePhotosItems(user.id, String(body.sessionId || "")));
+    } catch (error: any) { return json({ error: "The provider request could not be completed.", code: error?.message || "PROVIDER_ERROR" }, 502); }
+  }
 
   if (route === "integrations/google/import") {
     try {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
-      const result = await importGoogleMedia(user.id, Array.isArray(body.fileIds) ? body.fileIds : []);
-      return json(result, result.imported.length ? 200 : 422);
+      const result = await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : []);
+      return json(result);
     } catch (error: any) {
       console.error("Google Drive import failed", error);
       return json({ error: "The selected Google Drive media could not be imported.", code: error?.message || "GOOGLE_IMPORT_FAILED" }, 502);

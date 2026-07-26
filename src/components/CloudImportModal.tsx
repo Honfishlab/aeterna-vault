@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { BackgroundImportProgress } from "./BackgroundImportProgress";
+import { GooglePhotosPicker } from "./GooglePhotosPicker";
 import { Check, Cloud, ExternalLink, Image as ImageIcon, Loader2, LogOut, RefreshCw, Video, X } from "lucide-react";
 
 export interface ImportedCloudMedia {
@@ -113,10 +115,11 @@ export function CloudImportModal({ isOpen, onClose, onImported }: {
         body: JSON.stringify({ fileIds: selected }),
       });
       const body = await response.json();
-      if (!response.ok && !body.imported?.length) throw new Error(body.error || "Import failed.");
+      if (!response.ok && !body.imported?.length && !body.jobs?.length) throw new Error(body.error || "Import failed.");
+      if (body.jobs?.length) window.dispatchEvent(new CustomEvent("aeterna-import-jobs", { detail: body.jobs }));
       onImported(body.imported || []);
       if (body.failed?.length) setError(`${body.failed.length} item(s) could not be imported.`);
-      else onClose();
+      else if (!body.jobs?.length) onClose();
     } catch (reason: any) {
       setError(reason?.message || "Import failed.");
     } finally {
@@ -161,6 +164,7 @@ export function CloudImportModal({ isOpen, onClose, onImported }: {
               <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
                 <div className="text-xs text-[#C8B1E4]">Connected as <strong className="text-[#FFF2A8]">{status.accountEmail || status.displayName}</strong></div>
                 <div className="flex gap-2">
+                  <GooglePhotosPicker />
                   <button onClick={() => loadFiles(null, true)} className="gold-beveled-btn px-3 py-2 text-xs flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
                   <button onClick={disconnect} className="px-3 py-2 text-xs text-rose-300 border border-rose-500/40 rounded-xl flex items-center gap-1"><LogOut className="w-3.5 h-3.5" /> Disconnect</button>
                 </div>
@@ -187,6 +191,7 @@ export function CloudImportModal({ isOpen, onClose, onImported }: {
                 </div>
               )}
               {nextPageToken && <button onClick={() => loadFiles(nextPageToken)} disabled={loading} className="mt-5 w-full gold-beveled-btn py-2 text-xs">Load more media</button>}
+              <BackgroundImportProgress onImported={onImported} />
             </>
           )}
         </div>
