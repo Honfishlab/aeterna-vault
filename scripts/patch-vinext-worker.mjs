@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { build } from 'esbuild';
 
 const root = path.resolve('dist/server');
 let patched = 0;
@@ -22,6 +23,18 @@ function visit(directory) {
 
 visit(root);
 if (patched === 0) throw new Error('No Vinext worker files required compatibility patching.');
+
+const ssrEntry = path.join(root, 'ssr', 'index.js');
+const bundledSsrEntry = path.join(root, 'ssr', 'index.bundled.js');
+await build({
+  entryPoints: [ssrEntry],
+  bundle: true,
+  format: 'esm',
+  platform: 'neutral',
+  external: ['node:*'],
+  outfile: bundledSsrEntry,
+});
+fs.renameSync(bundledSsrEntry, ssrEntry);
 const entry = path.join(root, 'index.js');
 const handler = path.join(root, 'vinext-handler.js');
 fs.renameSync(entry, handler);
