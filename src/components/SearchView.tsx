@@ -801,7 +801,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
       {/* BENTO GRID GALLERY OF LIVE CONTENT */}
       {filteredMemories.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(280px,42vh)] gap-4 pt-2">
           {filteredMemories.map((mem, idx) => {
             const isSelectedInGrid = selectedGridPhotoIds.includes(mem.id);
             return (
@@ -819,7 +819,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     ? 'border-[#DFB260] ring-4 ring-[#DFB260]/50 scale-[1.01] shadow-[#DFB260]/30'
                     : 'border-[#DFB260]/30 hover:border-[#F5D77F] hover:shadow-[#DFB260]/10'
                 } ${
-                  idx === 0 && filteredMemories.length > 2 ? 'sm:col-span-2 lg:col-span-2 aspect-[16/9]' : 'aspect-square sm:aspect-[4/3]'
+                  idx % 7 === 0 && filteredMemories.length > 2 ? 'sm:col-span-2 xl:col-span-2 sm:row-span-2 min-h-[520px]' : idx % 5 === 0 ? 'sm:row-span-2 min-h-[520px]' : 'min-h-[320px]'
                 }`}
               >
                 {/* Image Container */}
@@ -1492,6 +1492,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
       {selectedImage && (
         <ImageViewerModal
           image={selectedImage}
+          images={filteredMemories.filter(item => Boolean(item.imageUrl)).map(item => ({ ...item, imageUrl: item.imageUrl! }))}
+          onSelectImage={(item) => setSelectedImage(item as MemoryItem)}
           onClose={() => setSelectedImage(null)}
           onPrev={() => {
             const currentIndex = filteredMemories.findIndex(m => m.id === selectedImage.id);

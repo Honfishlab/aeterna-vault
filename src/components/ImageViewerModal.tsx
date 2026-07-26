@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Globe, ExternalLink, Share2, Info, Trash2, 
   ChevronLeft, ChevronRight, FolderEdit, Clock, MapPin, 
-  ShieldCheck, Copy, Check, Users, Sparkles, Loader2, Tag
+  ShieldCheck, Copy, Check, Users, Sparkles, Loader2, Tag, ZoomIn, ZoomOut, RotateCw, Maximize2, Play, Pause, Move, Minimize2
 } from 'lucide-react';
 
 export interface ImageViewerData {
@@ -38,6 +38,8 @@ interface ImageViewerModalProps {
   onDelete?: (id: string) => void;
   onSelectView?: (view: string) => void;
   onOpenEditAlbum?: (albumName: string) => void;
+  images?: ImageViewerData[];
+  onSelectImage?: (image: ImageViewerData) => void;
 }
 
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
@@ -49,20 +51,70 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   hasNext = false,
   onDelete,
   onSelectView,
-  onOpenEditAlbum
+  onOpenEditAlbum,
+  images = [],
+  onSelectImage
 }) => {
-  const [showInfo, setShowInfo] = useState(true);
+  const [showInfo, setShowInfo] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef({ x: 0, y: 0, originX: 0, originY: 0 });
+
+  const resetView = () => {
+    setZoom(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const changeZoom = (next: number) => {
+    const clamped = Math.min(6, Math.max(0.5, next));
+    setZoom(clamped);
+    if (clamped <= 1) setPosition({ x: 0, y: 0 });
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && onPrev && hasPrev) onPrev();
       if (e.key === 'ArrowRight' && onNext && hasNext) onNext();
+      if (e.key === '+' || e.key === '=') changeZoom(zoom + 0.25);
+      if (e.key === '-') changeZoom(zoom - 0.25);
+      if (e.key.toLowerCase() === 'r') setRotation(value => value + 90);
+      if (e.key === '0') resetView();
+      if (e.key === ' ') { e.preventDefault(); setIsPlaying(value => !value); }
+      if (e.key.toLowerCase() === 'f') stageRef.current?.requestFullscreen?.();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, onPrev, onNext, hasPrev, hasNext]);
+  }, [onClose, onPrev, onNext, hasPrev, hasNext, zoom]);
+
+  useEffect(() => { resetView(); }, [image?.id, image?.imageUrl]);
+
+  useEffect(() => {
+    if (!isPlaying || !onNext || !hasNext) return;
+    const timer = window.setInterval(onNext, 5500);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, onNext, hasNext]);
+
+  useEffect(() => {
+    const current = images.findIndex(item => item.id === image?.id);
+    [images[current - 1], images[current + 1]].filter(Boolean).forEach(item => {
+      const preload = new Image();
+      preload.src = item.imageUrl;
+    });
+  }, [image?.id, images]);
+
+  useEffect(() => {
+    const listener = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', listener);
+    return () => document.removeEventListener('fullscreenchange', listener);
+  }, []);
 
   if (!image) return null;
 
@@ -77,7 +129,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#05020A]/95 backdrop-blur-2xl flex flex-col justify-between overflow-hidden animate-fade-in">
+    <div ref={stageRef} className="fixed inset-0 z-50 bg-[#05020A]/95 backdrop-blur-2xl flex flex-col justify-between overflow-hidden animate-fade-in">
       {/* TOP FLOATING CONTROL BAR */}
       <div 
         className="relative z-20 w-full p-4 sm:px-6 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between text-white border-b border-[#DFB260]/30"
@@ -101,6 +153,14 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {/* TOP ACTION BUTTONS */}
         <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+          <div className="hidden md:flex items-center gap-1 mr-2 rounded-full bg-black/50 border border-white/15 p-1">
+            <button onClick={() => changeZoom(zoom - 0.25)} className="p-2 rounded-full hover:bg-white/15" title="Zoom out (-)"><ZoomOut className="w-4 h-4" /></button>
+            <button onClick={resetView} className="min-w-14 px-2 py-1.5 rounded-full hover:bg-white/15 text-[10px] font-mono" title="Fit image (0)">{Math.round(zoom * 100)}%</button>
+            <button onClick={() => changeZoom(zoom + 0.25)} className="p-2 rounded-full hover:bg-white/15" title="Zoom in (+)"><ZoomIn className="w-4 h-4" /></button>
+            <button onClick={() => setRotation(value => value + 90)} className="p-2 rounded-full hover:bg-white/15" title="Rotate (R)"><RotateCw className="w-4 h-4" /></button>
+            <button onClick={() => { if (!isPlaying) stageRef.current?.requestFullscreen?.(); setIsPlaying(value => !value); }} className={isPlaying ? 'p-2 rounded-full bg-[#DFB260] text-black' : 'p-2 rounded-full hover:bg-white/15'} title="Cinematic slideshow (Space)">{isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
+            <button onClick={() => isFullscreen ? document.exitFullscreen() : stageRef.current?.requestFullscreen?.()} className="p-2 rounded-full hover:bg-white/15" title="Fullscreen (F)">{isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</button>
+          </div>
           {onSelectView && (
             <button
               onClick={() => {
@@ -170,20 +230,46 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       <div className="relative w-full h-full flex-1 flex items-center justify-center overflow-hidden">
         {/* IMAGE DISPLAY */}
         <div 
-          className="relative w-full h-full flex-1 flex items-center justify-center p-4 overflow-hidden cursor-pointer"
-          onClick={onClose}
+          className={zoom > 1 ? 'relative w-full h-full flex-1 flex items-center justify-center overflow-hidden touch-none cursor-grab' : 'relative w-full h-full flex-1 flex items-center justify-center overflow-hidden touch-none cursor-zoom-in'}
+          onWheel={(e) => { e.preventDefault(); changeZoom(zoom + (e.deltaY < 0 ? 0.2 : -0.2)); }}
+          onDoubleClick={(e) => { e.stopPropagation(); zoom > 1 ? resetView() : changeZoom(2); }}
+          onPointerDown={(e) => {
+            if (zoom <= 1) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            dragStartRef.current = { x: e.clientX, y: e.clientY, originX: position.x, originY: position.y };
+            setIsDragging(true);
+          }}
+          onPointerMove={(e) => {
+            if (!isDragging) return;
+            setPosition({ x: dragStartRef.current.originX + e.clientX - dragStartRef.current.x, y: dragStartRef.current.originY + e.clientY - dragStartRef.current.y });
+          }}
+          onPointerUp={() => setIsDragging(false)}
+          onPointerCancel={() => setIsDragging(false)}
         >
           <img
             src={image.imageUrl}
             alt={image.title}
             onClick={(e) => e.stopPropagation()}
             referrerPolicy="no-referrer"
-            className="max-w-full max-h-full w-auto h-auto object-contain select-none transition-all duration-300 pointer-events-auto rounded-xl shadow-2xl border border-[#DFB260]/30"
+            draggable={false}
+            className={(isDragging ? 'max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20' : 'max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20 transition-transform duration-500 ease-out') + (isPlaying ? ' viewer-ken-burns' : '')}
             style={{
               maxHeight: 'calc(100vh - 120px)',
-              maxWidth: showInfo ? 'calc(100vw - 380px)' : '100vw'
+              maxWidth: showInfo ? 'calc(100vw - 380px)' : '100vw',
+              transform: 'translate3d(' + position.x + 'px, ' + position.y + 'px, 0) scale(' + zoom + ') rotate(' + rotation + 'deg)'
             }}
           />
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-1 rounded-full bg-black/75 border border-white/20 p-1.5 backdrop-blur-xl">
+            <button onClick={() => changeZoom(zoom - 0.25)} className="p-2"><ZoomOut className="w-4 h-4" /></button>
+            <button onClick={resetView} className="px-2 text-[10px] font-mono">{Math.round(zoom * 100)}%</button>
+            <button onClick={() => changeZoom(zoom + 0.25)} className="p-2"><ZoomIn className="w-4 h-4" /></button>
+            <button onClick={() => setRotation(value => value + 90)} className="p-2"><RotateCw className="w-4 h-4" /></button>
+            <button onClick={() => { if (!isPlaying) stageRef.current?.requestFullscreen?.(); setIsPlaying(value => !value); }} className="p-2">{isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
+            <button onClick={() => stageRef.current?.requestFullscreen?.()} className="p-2"><Maximize2 className="w-4 h-4" /></button>
+          </div>
+
+          {zoom > 1 && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 rounded-full bg-black/60 px-3 py-1.5 text-[10px] font-mono text-white/70 flex items-center gap-1"><Move className="w-3 h-3" /> Drag to pan · double-click to fit</div>}
 
           {/* PREVIOUS & NEXT NAV BUTTONS */}
           {hasPrev && onPrev && (
@@ -210,6 +296,16 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             >
               <ChevronRight className="w-7 h-7" />
             </button>
+          )}
+
+          {images.length > 1 && !showInfo && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 max-w-[80vw] overflow-x-auto rounded-2xl bg-black/65 border border-white/15 p-2 backdrop-blur-xl flex gap-2">
+              {images.map((item, index) => (
+                <button key={item.id || item.imageUrl} onClick={() => onSelectImage?.(item)} className="relative flex-none w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden border-2 opacity-75 hover:opacity-100 transition-all" style={{ borderColor: item.id === image.id ? "#F5D77F" : "transparent" }} title={String(index + 1) + ". " + item.title}>
+                  <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
