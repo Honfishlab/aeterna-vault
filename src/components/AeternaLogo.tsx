@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const logoImage = '/aeterna-logo.png';
+const logoImage = '/aeterna-vault-logo-bg.png';
 
 interface AeternaLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'hero';
@@ -13,7 +13,7 @@ interface AeternaLogoProps {
 
 export const AeternaLogo: React.FC<AeternaLogoProps> = ({
   size = 'md',
-  showTitle = true,
+  showTitle = false,
   showSubtitle = true,
   className = '',
   onClick
@@ -22,11 +22,11 @@ export const AeternaLogo: React.FC<AeternaLogoProps> = ({
 
   // Size mappings
   const containerSizes = {
-    sm: 'w-10 h-10 sm:w-12 sm:h-12',
-    md: 'w-16 h-16 sm:w-20 sm:h-20',
-    lg: 'w-24 h-24 sm:w-28 sm:h-28',
-    xl: 'w-36 h-36 sm:w-44 sm:h-44',
-    hero: 'w-52 h-52 sm:w-64 sm:h-64 md:w-72 md:h-72'
+    sm: 'w-20 aspect-[16/9] sm:w-24',
+    md: 'w-28 aspect-[16/9] sm:w-32',
+    lg: 'w-44 aspect-[16/9] sm:w-52',
+    xl: 'w-64 aspect-[16/9] sm:w-80',
+    hero: 'w-72 aspect-[16/9] sm:w-96 md:w-[32rem]'
   };
 
   const titleSizes = {
@@ -55,7 +55,7 @@ export const AeternaLogo: React.FC<AeternaLogoProps> = ({
       <div className={`relative ${containerSizes[size]} flex items-center justify-center`}>
         
         {/* Outer Celestial Glow Effect */}
-        <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-[#DFB260]/40 via-[#7336b4]/30 to-[#F5D77F]/40 blur-xl animate-pulse pointer-events-none"></div>
+        <div className="absolute -inset-2 rounded-2xl bg-gradient-to-r from-[#DFB260]/40 via-[#7336b4]/30 to-[#F5D77F]/40 blur-xl animate-pulse pointer-events-none"></div>
         
         {/* Logo Image or SVG Fallback */}
         {!imgError ? (
@@ -63,7 +63,7 @@ export const AeternaLogo: React.FC<AeternaLogoProps> = ({
             src={logoImage} 
             alt="Aeterna Vault Logo" 
             onError={() => setImgError(true)}
-            className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_20px_rgba(223,178,96,0.6)] rounded-full transition-transform duration-300 group-hover:scale-105"
+            className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_20px_rgba(223,178,96,0.6)] rounded-xl transition-transform duration-300 group-hover:scale-105"
             referrerPolicy="no-referrer"
           />
         ) : (
