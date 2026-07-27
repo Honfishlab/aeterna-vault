@@ -74,6 +74,12 @@ export function GooglePhotosPicker() {
     timerRef.current = window.setInterval(() => checkSelection(session.id), 5000);
   };
 
+  useEffect(() => {
+    const reselect = () => void choose();
+    window.addEventListener("aeterna-reselect-google-photos", reselect);
+    return () => window.removeEventListener("aeterna-reselect-google-photos", reselect);
+  }, []);
+
   return (
     <div className="max-w-xs">
       {phase === "idle" ? (

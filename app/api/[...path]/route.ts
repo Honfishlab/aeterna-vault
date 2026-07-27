@@ -3,7 +3,7 @@ import { authenticatedUser, createSession, destroySession, hashPassword, normali
 import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } from "../../../server/r2";
 import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogleDrive, googleConnectionStatus, googleDriveConfigured, googleThumbnail, importGoogleMedia, listGoogleMedia } from "../../../server/googleDrive";
 import { createPhotosSession, pollPhotosSession, queuePhotosItems } from "../../../server/googlePhotos";
-import { jobStatus, processNextImportJob, queueDriveJobs } from "../../../server/importJobs";
+import { acknowledgeImportJobs, cancelImportJob, jobStatus, processNextImportJob, queueDriveJobs, retryImportJob } from "../../../server/importJobs";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -236,7 +236,23 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "import-jobs/acknowledge") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    await acknowledgeImportJobs(user.id, Array.isArray(body.ids) ? body.ids : []);
+    return json({ success: true });
+  }
+
+  if (route === "import-jobs/cancel" || route === "import-jobs/retry") {
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const job = route.endsWith("cancel") ? await cancelImportJob(user.id, String(body.id || "")) : await retryImportJob(user.id, String(body.id || ""));
+      return json({ job });
+    } catch (error: any) { return json({ error: "The import job could not be updated.", code: error?.message || "JOB_UPDATE_FAILED" }, 409); }
+  }
 
   if (route === "internal/import-worker") {
     if (!process.env.IMPORT_WORKER_SECRET || request.headers.get("authorization") !== "Bearer " + process.env.IMPORT_WORKER_SECRET.trim()) return json({ error: "Unauthorized." }, 401);
