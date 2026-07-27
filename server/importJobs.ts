@@ -114,10 +114,21 @@ export async function processNextImportJob() {
     const total = Number(download.headers.get("content-length") || job.bytes_total || 0);
     if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_5_GB");
     await execute("UPDATE media_import_jobs SET bytes_total=$1,updated_at=NOW() WHERE id=$2", [total, job.id]);
-    const mediaId = crypto.randomUUID();
-    const objectKey = job.user_id + "/" + mediaId + "-" + safeObjectName(job.provider_file_name);
-    await execute("DELETE FROM media_objects WHERE user_id=$1 AND source_provider=$2 AND source_id=$3 AND status=$$pending$$", [job.user_id, payload.provider, job.provider_file_id]);
-    await execute("INSERT INTO media_objects (id,user_id,object_key,original_name,content_type,size_bytes,status,source_provider,source_id) VALUES ($1,$2,$3,$4,$5,$6,$$pending$$,$7,$8)", [mediaId, job.user_id, objectKey, job.provider_file_name, mimeType, total, payload.provider, job.provider_file_id]);
+    const existingObjects = await query<{ id: string; object_key: string; status: string; size_bytes: string }>("SELECT id,object_key,status,size_bytes FROM media_objects WHERE user_id=$1 AND source_provider=$2 AND source_id=$3 LIMIT 1", [job.user_id, payload.provider, job.provider_file_id]);
+    const existingObject = existingObjects[0];
+    if (existingObject?.status === "ready") {
+      await download.body.cancel().catch(() => undefined);
+      const existingSize = Number(existingObject.size_bytes || total || 0);
+      await execute("UPDATE media_import_jobs SET status=$$complete$$,media_object_id=$1,progress=100,bytes_total=$2,bytes_transferred=$2,completed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3", [existingObject.id, existingSize, job.id]);
+      return { id: job.id, status: "complete" };
+    }
+    const mediaId = existingObject?.id || crypto.randomUUID();
+    const objectKey = existingObject?.object_key || job.user_id + "/" + mediaId + "-" + safeObjectName(job.provider_file_name);
+    if (existingObject) {
+      await execute("UPDATE media_objects SET original_name=$1,content_type=$2,size_bytes=$3,status=$$pending$$,etag=NULL,completed_at=NULL WHERE id=$4", [job.provider_file_name, mimeType, total, mediaId]);
+    } else {
+      await execute("INSERT INTO media_objects (id,user_id,object_key,original_name,content_type,size_bytes,status,source_provider,source_id) VALUES ($1,$2,$3,$4,$5,$6,$$pending$$,$7,$8)", [mediaId, job.user_id, objectKey, job.provider_file_name, mimeType, total, payload.provider, job.provider_file_id]);
+    }
     const { client, Upload } = await r2Modules();
     const { Readable } = await import("node:stream");
     const upload = new Upload({ client, params: { Bucket: r2Bucket(), Key: objectKey, Body: Readable.fromWeb(download.body as any), ContentType: mimeType }, queueSize: 2, partSize: 8 * 1024 * 1024, leavePartsOnError: false });
