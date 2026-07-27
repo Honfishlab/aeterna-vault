@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ViewMode, WalletState, UserProfile } from '../types';
 import { AeternaLogo } from './AeternaLogo';
+import { GlobalImportIndicator } from './GlobalImportIndicator';
 import { 
   Shield, 
   Search, 
@@ -136,6 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Actions */}
           <div className="flex items-center space-x-2 sm:space-x-3">
+            <GlobalImportIndicator enabled={Boolean(currentUser)} onOpen={onOpenUpload} />
             {/* Record Video Camera Button */}
             {onOpenVideoRecorder && (
               <button
