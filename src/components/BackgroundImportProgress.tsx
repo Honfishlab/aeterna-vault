@@ -92,6 +92,14 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   }, []);
 
   useEffect(() => {
+    if (!jobs.some(job => job.status === "complete" && job.deliveredAt)) return;
+    const timer = window.setTimeout(() => {
+      setJobs(previous => previous.filter(job => !(job.status === "complete" && job.deliveredAt)));
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [jobs]);
+
+  useEffect(() => {
     if (!photoSessions.length) return;
     let checking = false;
     const checkSessions = async () => {
