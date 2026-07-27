@@ -46,3 +46,32 @@ The integration requests read-only Drive access. OAuth tokens are AES-GCM encryp
 Enable the Google Photos Picker API in the same Google Cloud project and add `https://www.googleapis.com/auth/photospicker.mediaitems.readonly` to the consent screen Data Access scopes. Existing users must disconnect and reconnect Google once to grant this additional scope.
 
 Set the same private `IMPORT_WORKER_SECRET` value on both the `aeterna-vault` web service and `aeterna-vault-import-worker`. The worker claims PostgreSQL jobs, streams provider downloads into multipart R2 uploads, reports byte progress, and retries failures up to three times.
+
+
+### Video import pipeline
+
+Google Photos and Google Drive videos are imported by the background worker rather than through the browser:
+
+1. The selected provider item creates a PostgreSQL import job.
+2. The worker downloads the original through the provider's authenticated API.
+3. Large files are uploaded to private R2 in 8 MB multipart chunks.
+4. Each confirmed R2 part, byte offset, and ETag is checkpointed in PostgreSQL.
+5. Interrupted jobs resume from the last confirmed byte when the provider supports HTTP range requests.
+6. The worker stores a separate video poster image in R2 and records available source metadata.
+7. The app serves both the video and poster through authenticated `/api/media/...` endpoints.
+
+Imports support files up to 5 GB. The progress panel shows transferred bytes, estimated time remaining, cancellation, retry, and the saved resume position. Completed entries retain original size, width, height, duration, capture time, and source provider when supplied by Google.
+
+The `006_video_metadata_and_resumable_imports` migration adds the metadata, thumbnail, and multipart-checkpoint columns. Render applies it through the existing `npm run db:migrate` pre-deploy command. Multipart checkpoints and pending media are retained for 24 hours so deployments and temporary provider failures can recover.
+
+### Deployment verification
+
+After a Render deployment:
+
+1. Confirm the pre-deploy log reports `Applied 006_video_metadata_and_resumable_imports` or that it is already applied.
+2. Confirm both the web service and `aeterna-vault-import-worker` are live.
+3. Import a Google Photos video larger than 8 MB and verify byte progress advances.
+4. Open the resulting album card and confirm its stored poster appears.
+5. Open the full-screen viewer and confirm playback, seeking, and range requests work.
+
+Videos imported before migration `006` remain playable. Re-selecting an older Google video can backfill its stored poster and source metadata without duplicating the R2 original.
