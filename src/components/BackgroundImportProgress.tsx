@@ -59,7 +59,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       size: Number(job.bytesTotal || 0),
       mediaId: job.mediaId!,
       mediaUrl: "/api/media/" + job.mediaId,
-      thumbnailUrl: job.hasThumbnail ? "/api/media/" + job.mediaId + "/thumbnail" : undefined,
+      thumbnailUrl: job.hasThumbnail ? "/api/media/" + job.mediaId + "/thumbnail?size=large" : undefined,
       width: job.width,
       height: job.height,
       durationMs: job.durationMs,

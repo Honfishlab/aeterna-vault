@@ -9,3 +9,5 @@ coverage/
 .next/
 .vinext/
 .vite/
+playwright-report/
+test-results/

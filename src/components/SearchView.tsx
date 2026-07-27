@@ -761,7 +761,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   className="flex items-center space-x-3.5 flex-1 min-w-0 cursor-pointer"
                 >
                   <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-[#DFB260]/40 flex-shrink-0 bg-[#120B21]">
-                    <img src={ag.coverUrl} alt={ag.albumName} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                    <img src={ag.coverUrl.replace("size=large", "size=medium")} alt={ag.albumName} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                     <div className="absolute inset-0 bg-black/20"></div>
                     {ag.leadItem?.isCoverPhoto && (
                       <div className="absolute top-1 left-1 bg-[#DFB260] text-[#120B21] p-0.5 rounded-full" title="Lead Photo Set">
@@ -829,7 +829,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <>
                       <video
                         src={mem.videoUrl}
-                        poster={mem.thumbnailUrl || mem.imageUrl}
+                        poster={mem.thumbnailUrl?.replace("size=large", "size=medium") || mem.imageUrl}
                         muted
                         playsInline
                         preload="metadata"

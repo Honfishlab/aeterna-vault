@@ -9,6 +9,7 @@ export type ViewMode =
   | 'locker'
   | 'inheritance'
   | 'immortal'
+  | 'imports'
   | 'audit';
 
 export interface Heir {

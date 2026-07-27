@@ -9,7 +9,8 @@
     "start": "vinext start",
     "clean": "rm -rf dist .vinext .vite",
     "lint": "tsc --noEmit",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",
@@ -22,6 +23,7 @@
     "@vitejs/plugin-rsc": "^0.5.30",
     "arweave": "^1.15.7",
     "d3": "^7.9.0",
+    "ffmpeg-static": "^5.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "pg": "^8.22.0",
@@ -33,6 +35,7 @@
     "vite-tsconfig-paths": "^6.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.28.1",

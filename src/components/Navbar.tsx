@@ -24,7 +24,8 @@ import {
   FileCheck,
   Video,
   Archive,
-  Download
+  Download,
+  History
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -61,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems: { id: ViewMode; label: string; icon: any }[] = [
     { id: 'landing', label: 'Landing', icon: Shield },
     { id: 'dashboard', label: 'Dashboard', icon: Layers },
-    { id: 'audit', label: 'Audit', icon: FileCheck },
+    { id: 'imports', label: 'Import History', icon: History },
     { id: 'immortal', label: 'Immortal Gateway', icon: Globe },
     { id: 'inheritance', label: 'Inheritance Protocol', icon: Users },
     { id: 'legacy', label: 'Time Capsule', icon: BookOpen },

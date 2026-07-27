@@ -4,6 +4,7 @@ import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } f
 import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogleDrive, googleConnectionStatus, googleDriveConfigured, googleThumbnail, importGoogleMedia, listGoogleMedia } from "../../../server/googleDrive";
 import { createPhotosSession, pollPhotosSession, queuePhotosItems } from "../../../server/googlePhotos";
 import { acknowledgeImportJobs, cancelImportJob, jobStatus, queueDriveJobs, retryImportJob, startImportWorker } from "../../../server/importJobs";
+import { queueMediaProcessing } from "../../../server/mediaProcessing";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -120,7 +121,8 @@ export async function GET(request: Request) {
     const user = await authenticatedUser(request);
     if (!user) return json({ error: "Authentication required." }, 401);
     const ids = (new URL(request.url).searchParams.get("ids") || "").split(",").filter(Boolean);
-    return json({ jobs: await jobStatus(user.id, ids) });
+    const history = new URL(request.url).searchParams.get("history") === "true";
+    return json({ jobs: await jobStatus(user.id, ids, history) });
   }
 
   if (route.startsWith("integrations/google-photos/session/")) {
@@ -177,10 +179,12 @@ export async function GET(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const mediaId = route.split("/")[1];
-      const rows = await query<{ thumbnail_object_key: string }>("SELECT thumbnail_object_key FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND thumbnail_object_key IS NOT NULL LIMIT 1", [mediaId, user.id, "ready"]);
+      const rows = await query<{ thumbnail_object_key: string; thumbnail_variants: Record<string, string> }>("SELECT thumbnail_object_key,thumbnail_variants FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND thumbnail_object_key IS NOT NULL LIMIT 1", [mediaId, user.id, "ready"]);
       if (!rows[0]) return json({ error: "Video thumbnail not found." }, 404);
       const { client, GetObjectCommand } = await r2Modules();
-      const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: rows[0].thumbnail_object_key }));
+      const requestedSize = new URL(request.url).searchParams.get("size") || "large";
+      const key = rows[0].thumbnail_variants?.[requestedSize] || rows[0].thumbnail_object_key;
+      const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: key }));
       const responseBody = object.Body?.transformToWebStream ? object.Body.transformToWebStream() : object.Body;
       return new Response(responseBody, { headers: { "Content-Type": object.ContentType || "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff" } });
     } catch (error) { console.error("R2 thumbnail read failed", error); return json({ error: "Video thumbnail is temporarily unavailable." }, 502); }
@@ -192,7 +196,7 @@ export async function GET(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const mediaId = route.split("/")[1];
-      const rows = await query<{ object_key: string; content_type: string; original_name: string }>("SELECT object_key, content_type, original_name FROM media_objects WHERE id = $1 AND user_id = $2 AND status = $3 LIMIT 1", [mediaId, user.id, "ready"]);
+      const rows = await query<{ object_key: string; content_type: string; original_name: string }>("SELECT COALESCE(playback_object_key,object_key) AS object_key,CASE WHEN playback_object_key IS NOT NULL THEN $$video/mp4$$ ELSE content_type END AS content_type,original_name FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 LIMIT 1", [mediaId, user.id, "ready"]);
       if (!rows[0]) return json({ error: "Media object not found." }, 404);
       const { client, GetObjectCommand } = await r2Modules();
       const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: rows[0].object_key, Range: request.headers.get("range") || undefined }));
@@ -333,12 +337,13 @@ export async function POST(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const mediaId = String(body.mediaId || "");
-      const rows = await query<{ object_key: string; size_bytes: number }>("SELECT object_key, size_bytes FROM media_objects WHERE id = $1 AND user_id = $2 AND status = $3 LIMIT 1", [mediaId, user.id, "pending"]);
+      const rows = await query<{ object_key: string; size_bytes: number; content_type: string }>("SELECT object_key,size_bytes,content_type FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 LIMIT 1", [mediaId, user.id, "pending"]);
       if (!rows[0]) return json({ error: "Pending media upload not found." }, 404);
       const { client, HeadObjectCommand } = await r2Modules();
       const object = await client.send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: rows[0].object_key }));
       if (Number(object.ContentLength || 0) !== Number(rows[0].size_bytes)) return json({ error: "Uploaded file size did not match authorization." }, 409);
       await execute("UPDATE media_objects SET status = $1, etag = $2, completed_at = NOW() WHERE id = $3 AND user_id = $4", ["ready", object.ETag || null, mediaId, user.id]);
+      if (rows[0].content_type.startsWith("video/")) await queueMediaProcessing(user.id, mediaId);
       return json({ success: true, mediaId, mediaUrl: "/api/media/" + mediaId });
     } catch (error) { console.error("R2 upload completion failed", error); return json({ error: "Unable to verify media upload." }, 502); }
   }

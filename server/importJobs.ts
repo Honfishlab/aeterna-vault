@@ -1,10 +1,11 @@
 import { execute, query } from "./db";
 import { googleAccess } from "./googleDrive";
 import { mediaTypeAllowed, r2Bucket, r2Modules, safeObjectName } from "./r2";
+import { processNextMediaJob, queueMediaProcessing } from "./mediaProcessing";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
-const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,(provider_payload->>$$width$$)::integer AS width,(provider_payload->>$$height$$)::integer AS height,(provider_payload->>$$durationMillis$$)::bigint AS \"durationMs\",provider_payload->>$$createTime$$ AS \"createdTime\",EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.thumbnail_object_key IS NOT NULL) AS \"hasThumbnail\",error_message AS error,attempts,resume_offset AS \"resumeOffset\",created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",delivered_at AS \"deliveredAt\"";
+const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,(provider_payload->>$$width$$)::integer AS width,(provider_payload->>$$height$$)::integer AS height,(provider_payload->>$$durationMillis$$)::bigint AS \"durationMs\",provider_payload->>$$createTime$$ AS \"createdTime\",EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.thumbnail_object_key IS NOT NULL) AS \"hasThumbnail\",(SELECT mo.processing_status FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingStatus\",(SELECT mo.processing_error FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingError\",error_message AS error,attempts,resume_offset AS \"resumeOffset\",created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",completed_at AS \"completedAt\",delivered_at AS \"deliveredAt\"";
 let lastCleanupAt = 0;
 let workerBusy = false;
 
@@ -108,7 +109,8 @@ export async function queueDriveJobs(userId: string, fileIds: string[]) {
   return { jobs };
 }
 
-export async function jobStatus(userId: string, ids: string[]) {
+export async function jobStatus(userId: string, ids: string[], history = false) {
+  if (history) return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200", [userId]);
   if (ids.length) return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND id=ANY($2::text[]) ORDER BY created_at", [userId, ids.slice(0,500)]);
   return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND (status IN ($$queued$$,$$transferring$$,$$cancel_requested$$) OR (status IN ($$failed$$,$$cancelled$$) AND updated_at>NOW()-INTERVAL $$7 days$$) OR (status=$$complete$$ AND delivered_at IS NULL)) ORDER BY created_at DESC LIMIT 100", [userId]);
 }
@@ -154,6 +156,7 @@ export function startImportWorker() {
   if (workerBusy) return { accepted: false, busy: true };
   workerBusy = true;
   void processNextImportJob()
+    .then(result => result || processNextMediaJob())
     .catch(error => console.error("Background import failed", error))
     .finally(() => { workerBusy = false; });
   return { accepted: true, busy: false };
@@ -198,6 +201,7 @@ export async function processNextImportJob() {
       const thumbnailKey = await persistVideoThumbnail(payload, auth.token, job.user_id, existingObject.id).catch(() => null);
       await execute("UPDATE media_objects SET width=COALESCE($1,width),height=COALESCE($2,height),duration_ms=COALESCE($3,duration_ms),captured_at=COALESCE($4,captured_at),thumbnail_object_key=COALESCE($5,thumbnail_object_key) WHERE id=$6", [payload.width, payload.height, payload.durationMillis, payload.createTime, thumbnailKey, existingObject.id]);
       await execute("UPDATE media_import_jobs SET status=$$complete$$,media_object_id=$1,progress=100,bytes_total=$2,bytes_transferred=$2,completed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3", [existingObject.id, existingSize, job.id]);
+      if (mimeType.startsWith("video/")) await queueMediaProcessing(job.user_id, existingObject.id);
       return { id: job.id, status: "complete" };
     }
     const mediaId = existingObject?.id || crypto.randomUUID();
@@ -211,6 +215,7 @@ export async function processNextImportJob() {
     const thumbnailKey = await persistVideoThumbnail(payload, auth.token, job.user_id, mediaId).catch(() => null);
     await execute("UPDATE media_objects SET status=$$ready$$,etag=$1,size_bytes=CASE WHEN size_bytes>0 THEN size_bytes ELSE $2 END,thumbnail_object_key=COALESCE($3,thumbnail_object_key),completed_at=NOW() WHERE id=$4", [result.ETag, result.bytes || total, thumbnailKey, mediaId]);
     await execute("UPDATE media_import_jobs SET status=$$complete$$,media_object_id=$1,progress=100,bytes_total=$2,bytes_transferred=$2,resume_offset=$2,completed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3", [mediaId, result.bytes || total, job.id]);
+    if (mimeType.startsWith("video/")) await queueMediaProcessing(job.user_id, mediaId);
     return { id: job.id, status: "complete" };
   } catch (error: any) {
     const state = await query<{ status: string }>("SELECT status FROM media_import_jobs WHERE id=$1", [job.id]);

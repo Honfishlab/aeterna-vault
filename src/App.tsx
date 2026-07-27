@@ -14,6 +14,7 @@ import { LockerView } from './components/LockerView';
 import { InheritanceView } from './components/InheritanceView';
 import { ImmortalGatewayView } from './components/ImmortalGatewayView';
 import { AuditView } from './components/AuditView';
+import { ImportHistoryView } from './components/ImportHistoryView';
 import { UploadModal } from './components/UploadModal';
 import { VideoRecorderModal } from './components/VideoRecorderModal';
 import { WalletModal } from './components/WalletModal';
@@ -24,6 +25,7 @@ import { NotificationProvider } from './components/NotificationSystem';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('landing');
+  useEffect(() => { if (window.location.hash === '#imports') setCurrentView('imports'); }, []);
   const [searchQuery, setSearchQuery] = useState('');
   
   // User Authentication State
@@ -576,6 +578,8 @@ export default function App() {
             onSelectView={setCurrentView}
           />
         )}
+
+        {currentView === 'imports' && <ImportHistoryView />}
 
         {currentView === 'audit' && (
           <AuditView

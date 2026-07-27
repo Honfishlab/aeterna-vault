@@ -75,3 +75,18 @@ After a Render deployment:
 5. Open the full-screen viewer and confirm playback, seeking, and range requests work.
 
 Videos imported before migration `006` remain playable. Re-selecting an older Google video can backfill its stored poster and source metadata without duplicating the R2 original.
+
+
+### Video processing, posters, and history
+
+Migration `007_media_processing_variants` adds an asynchronous media-processing queue. Imported originals remain available while bundled FFmpeg creates an H.264/AAC MP4 playback copy and 320, 640, and 1280 pixel JPEG posters. The private media endpoint automatically serves the compatible playback copy when ready and accepts `?size=small`, `medium`, or `large` for poster requests.
+
+Album covers are selected from the existing Edit Album panel by marking an album item as the lead photo. Video items use their generated poster, so they can also serve as custom album covers.
+
+Import History is available from the main navigation or `/#imports`. It lists transfers, resumptions, failures, provider source, byte size, and video-processing state. The page refreshes automatically while work is active.
+
+Run the automated browser tests with:
+
+`npm run test:e2e`
+
+The Playwright suite mocks provider history responses and verifies completed, processing, filtering, and failure states without accessing a real Google account or production vault.
