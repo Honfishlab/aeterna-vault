@@ -49,6 +49,12 @@ export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
   };
 
   const choose = async () => {
+    const popup = window.open("", "aeterna-google-photos", "popup=yes,width=900,height=760");
+    if (!popup) {
+      setError("Allow popups for Aeterna Vault, then try again.");
+      setPhase("idle");
+      return;
+    }
     stopPolling();
     setError("");
     setPhase("selecting");
@@ -62,16 +68,12 @@ export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
       setError(session.code === "GOOGLE_PHOTOS_SCOPE_REQUIRED"
         ? "Disconnect and reconnect Google once to grant Photos Picker access."
         : (session.error || "Google Photos is unavailable.") + (session.code ? " (" + session.code + ")" : ""));
+      popup.close();
       setPhase("idle");
       return;
     }
     setSessionId(session.id);
-    const popup = window.open(session.pickerUri, "aeterna-google-photos", "popup=yes,width=900,height=760");
-    if (!popup) {
-      setError("Allow popups for Aeterna Vault, then try again.");
-      setPhase("idle");
-      return;
-    }
+    popup.location.replace(session.pickerUri);
     window.dispatchEvent(new CustomEvent("aeterna-google-photos-session", { detail: { id: session.id } }));
     onQueued?.();
     setPhase("queued");
