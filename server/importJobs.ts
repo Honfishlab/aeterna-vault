@@ -79,9 +79,10 @@ export async function processNextImportJob() {
     const download = await fetch(downloadUrl, { headers: { Authorization: "Bearer " + auth.token } });
     if (!download.ok || !download.body) {
       if (payload.provider === "google-photos" && [401,403,404].includes(download.status)) throw new Error("PHOTOS_SELECTION_EXPIRED");
-      throw new Error("DOWNLOAD_FAILED");
+      throw new Error("DOWNLOAD_FAILED_HTTP_" + download.status);
     }
     const total = Number(download.headers.get("content-length") || job.bytes_total || 0);
+    if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_5_GB");
     await execute("UPDATE media_import_jobs SET bytes_total=$1,updated_at=NOW() WHERE id=$2", [total, job.id]);
     const mediaId = crypto.randomUUID();
     const objectKey = job.user_id + "/" + mediaId + "-" + safeObjectName(job.provider_file_name);

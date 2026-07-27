@@ -36,5 +36,6 @@ export function safeObjectName(name: string) {
 }
 
 export function mediaTypeAllowed(type: string) {
-  return /^(image\/(jpeg|png|webp|gif|avif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|webm|wav)|application\/pdf)$/.test(type);
+  const normalized = String(type || "").toLowerCase().split(";", 1)[0].trim();
+  return /^(image\/(jpeg|png|webp|gif|avif|heic|heif)|video\/[a-z0-9.+-]+|audio\/(mpeg|mp4|webm|wav)|application\/pdf)$/.test(normalized);
 }

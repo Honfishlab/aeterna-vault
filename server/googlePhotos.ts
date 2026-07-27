@@ -42,11 +42,13 @@ export async function queuePhotosItems(userId: string, id: string) {
   const jobs: any[] = [];
   for (const item of items.slice(0,500)) {
     const file = item.mediaFile || {};
-    if (!item.id || !file.baseUrl || !mediaTypeAllowed(file.mimeType)) continue;
+    const itemType = String(item.type || "").toUpperCase();
+    const mimeType = String(file.mimeType || (itemType === "VIDEO" ? "video/mp4" : itemType === "PHOTO" ? "image/jpeg" : "")).toLowerCase().split(";", 1)[0].trim();
+    if (!item.id || !file.baseUrl || !mediaTypeAllowed(mimeType)) continue;
     const jobId = crypto.randomUUID();
     const name = String(file.filename || "Google Photos media").slice(0,255);
-    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", baseUrl: file.baseUrl, mimeType: file.mimeType, type: item.type, createTime: item.createTime || null })]);
-    jobs.push({ id: jobId, name, mimeType: file.mimeType, status: "queued", progress: 0 });
+    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", baseUrl: file.baseUrl, mimeType: mimeType, type: item.type, createTime: item.createTime || null })]);
+    jobs.push({ id: jobId, name, mimeType, status: "queued", progress: 0 });
   }
   await execute("UPDATE provider_picker_sessions SET status=$$queued$$,updated_at=NOW() WHERE id=$1", [id]);
   await fetch(API + "/sessions/" + encodeURIComponent(rows[0].provider_session_id), { method: "DELETE", headers: { Authorization: "Bearer " + auth.token } }).catch(() => undefined);

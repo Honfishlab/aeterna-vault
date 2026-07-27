@@ -1035,11 +1035,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                               }`}
                             >
                               <div className="flex items-center space-x-2 overflow-hidden">
-                                <img 
-                                  src={item.previewUrl} 
-                                  alt={item.name} 
-                                  className="w-9 h-9 object-cover rounded-lg border border-[#DFB260]/40 flex-shrink-0"
-                                />
+                                {item.mimeType?.startsWith("video/") ? (
+                                  <video src={item.previewUrl} aria-label={item.name} muted preload="metadata" className="w-9 h-9 object-cover rounded-lg border border-[#DFB260]/40 flex-shrink-0" />
+                                ) : (
+                                  <img src={item.previewUrl} alt={item.name} className="w-9 h-9 object-cover rounded-lg border border-[#DFB260]/40 flex-shrink-0" />
+                                )}
                                 <div className="overflow-hidden text-left">
                                   <p className="text-[11px] font-semibold text-[#FFF2A8] truncate">{item.name}</p>
                                   <p className="text-[9px] font-mono text-[#C8B1E4]/70">#{idx + 1} • {(item.size / 1024 / 1024).toFixed(1)} MB</p>
