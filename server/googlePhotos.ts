@@ -43,10 +43,19 @@ export async function queuePhotosItems(userId: string, id: string) {
   for (const item of items.slice(0,500)) {
     const file = item.mediaFile || {};
     const itemType = String(item.type || "").toUpperCase();
-    const mimeType = String(file.mimeType || (itemType === "VIDEO" ? "video/mp4" : itemType === "PHOTO" ? "image/jpeg" : "")).toLowerCase().split(";", 1)[0].trim();
-    if (!item.id || !file.baseUrl || !mediaTypeAllowed(mimeType)) continue;
+    const reportedMimeType = String(file.mimeType || "").toLowerCase().split(";", 1)[0].trim();
+    const isVideo = itemType === "VIDEO" || reportedMimeType.startsWith("video/") || Boolean(file.mediaFileMetadata?.videoMetadata);
+    const mimeType = isVideo ? (reportedMimeType.startsWith("video/") ? reportedMimeType : "video/mp4") : (reportedMimeType || (itemType === "PHOTO" ? "image/jpeg" : ""));
+    if (!item.id || !mediaTypeAllowed(mimeType)) continue;
     const jobId = crypto.randomUUID();
-    const name = String(file.filename || "Google Photos media").slice(0,255);
+    const name = String(file.filename || (isVideo ? "Google Photos video" : "Google Photos media")).slice(0,255);
+    if (isVideo && !file.baseUrl) {
+      const error = "Google Photos did not provide a downloadable URL. Wait until the video plays in Google Photos, then select it again.";
+      await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,error_message) VALUES (,,,,,2688618,::jsonb,) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=2688618,provider_payload=EXCLUDED.provider_payload,error_message=EXCLUDED.error_message,bytes_transferred=0,progress=0,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", mimeType, type: item.type }), error]);
+      jobs.push({ id: jobId, name, mimeType, provider: "google-photos", status: "failed", progress: 0, error });
+      continue;
+    }
+    if (!file.baseUrl) continue;
     await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", baseUrl: file.baseUrl, mimeType: mimeType, type: item.type, createTime: item.createTime || null, videoProcessingStatus: file.mediaFileMetadata?.videoMetadata?.processingStatus || null })]);
     jobs.push({ id: jobId, name, mimeType, status: "queued", progress: 0 });
   }
