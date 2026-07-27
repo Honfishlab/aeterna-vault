@@ -64,6 +64,7 @@ export async function acknowledgeImportJobs(userId: string, ids: string[]) {
 
 export async function maintainImportQueue() {
   await execute("UPDATE media_import_jobs SET attempts=0,updated_at=NOW(),error_message=NULL WHERE status=$$queued$$ AND attempts>=3");
+  await execute("UPDATE media_import_jobs SET status=$$queued$$,attempts=0,progress=0,bytes_transferred=0,error_message=NULL,started_at=NULL,completed_at=NULL,updated_at=NOW() WHERE status=$$failed$$ AND error_message LIKE $$%media_objects_user_source_idx%$$");
   await execute("UPDATE media_import_jobs SET status=CASE WHEN status=$$cancel_requested$$ THEN $$cancelled$$ ELSE $$queued$$ END,started_at=NULL,updated_at=NOW(),error_message=CASE WHEN status=$$transferring$$ THEN $$Recovered after an interrupted worker.$$ ELSE error_message END WHERE status IN ($$transferring$$,$$cancel_requested$$) AND updated_at<NOW()-INTERVAL $$10 minutes$$");
   if (Date.now() - lastCleanupAt < 5 * 60_000) return;
   lastCleanupAt = Date.now();
