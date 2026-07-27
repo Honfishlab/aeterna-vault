@@ -3,7 +3,7 @@ import { CheckCircle2, Images, Loader2, RefreshCw } from "lucide-react";
 
 type Phase = "idle" | "selecting" | "queueing" | "queued";
 
-export function GooglePhotosPicker() {
+export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState("");
@@ -30,6 +30,7 @@ export function GooglePhotosPicker() {
       return;
     }
     window.dispatchEvent(new CustomEvent("aeterna-import-jobs", { detail: body.jobs || [] }));
+    if (body.jobs?.length) onQueued?.();
     setPhase("queued");
     setError(body.jobs?.length ? "" : "Google returned no supported photos or videos for this selection.");
     stopPolling();

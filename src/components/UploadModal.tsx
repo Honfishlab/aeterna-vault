@@ -9,6 +9,7 @@ import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
 import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
+import { BackgroundImportProgress } from './BackgroundImportProgress';
 import { 
   Upload, 
   X, 
@@ -781,6 +782,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             )}
           </div>
 
+          <BackgroundImportProgress onImported={handleCloudImported} />
+
           {/* Mode Banner Explanation */}
           <div className="bg-[#1A0C33] p-3 rounded-2xl border border-[#DFB260]/30 flex items-start space-x-2.5 text-xs text-[#C8B1E4]">
             <Sparkles className="w-4 h-4 text-[#F5D77F] flex-shrink-0 mt-0.5" />
@@ -1489,7 +1492,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         </div>
       )}
 
-      <CloudImportModal isOpen={cloudImportOpen} onClose={() => setCloudImportOpen(false)} onImported={handleCloudImported} />
+      <CloudImportModal
+        isOpen={cloudImportOpen}
+        onClose={() => setCloudImportOpen(false)}
+        onImported={handleCloudImported}
+        onGooglePhotosQueued={() => {
+          setUploadMode("album");
+          if (!title) setTitle("Imported Google Photos Album");
+          setCloudImportOpen(false);
+        }}
+      />
     </div>
   );
 };
