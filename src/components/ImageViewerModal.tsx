@@ -10,6 +10,13 @@ export interface ImageViewerData {
   imageUrl?: string;
   videoUrl?: string;
   mediaType?: 'photo' | 'video' | 'document';
+  thumbnailUrl?: string;
+  fileSizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  sourceProvider?: string;
+  sourceCreatedAt?: string;
   title: string;
   description?: string;
   date?: string;
@@ -255,6 +262,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <video
               key={mediaUrl}
               src={mediaUrl}
+              poster={image.thumbnailUrl || image.imageUrl}
               controls
               autoPlay
               playsInline
@@ -330,7 +338,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 <button key={item.id || item.imageUrl} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSelectImage?.(item); }} className="relative flex-none w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden border-2 opacity-75 hover:opacity-100 transition-all" style={{ borderColor: item.id === image.id ? "#F5D77F" : "transparent" }} title={String(index + 1) + ". " + item.title}>
                   {item.mediaType === "video" || item.videoUrl ? (
                     <>
-                      <video src={item.videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                      <video src={item.videoUrl} poster={item.thumbnailUrl || item.imageUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-5 h-5 fill-white text-white drop-shadow-lg" /></span>
                     </>
                   ) : (
@@ -351,6 +359,15 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <div className="space-y-1 max-w-3xl">
               <div className="flex items-center space-x-2 text-xs font-mono text-[#F5D77F]">
                 {image.date && <span>{image.date} {image.time ? `• ${image.time}` : ''}</span>}
+                {(image.fileSizeBytes || image.width || image.height || image.durationMs || image.sourceProvider) && (
+                  <div className="grid grid-cols-2 gap-3 bg-[#120B21] p-3 rounded-xl border border-[#DFB260]/20">
+                    {image.durationMs && <div><span className="text-[10px] text-[#F5D77F] font-mono block">Duration</span><span className="font-bold text-[#FFF2A8]">{Math.floor(image.durationMs / 60000)}:{String(Math.floor(image.durationMs / 1000) % 60).padStart(2, "0")}</span></div>}
+                    {image.width && image.height && <div><span className="text-[10px] text-[#F5D77F] font-mono block">Resolution</span><span className="font-bold text-[#FFF2A8]">{image.width} × {image.height}</span></div>}
+                    {image.fileSizeBytes && <div><span className="text-[10px] text-[#F5D77F] font-mono block">Original size</span><span className="font-bold text-[#FFF2A8]">{(image.fileSizeBytes / 1024 / 1024).toFixed(1)} MB</span></div>}
+                    {image.sourceProvider && <div><span className="text-[10px] text-[#F5D77F] font-mono block">Imported from</span><span className="font-bold text-[#FFF2A8]">{image.sourceProvider.replaceAll("-", " ")}</span></div>}
+                  </div>
+                )}
+
                 {image.location && (
                   <>
                     <span>•</span>

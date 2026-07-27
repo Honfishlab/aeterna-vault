@@ -829,6 +829,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <>
                       <video
                         src={mem.videoUrl}
+                        poster={mem.thumbnailUrl || mem.imageUrl}
                         muted
                         playsInline
                         preload="metadata"

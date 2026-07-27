@@ -16,6 +16,12 @@ interface Job {
   deliveredAt?: string | null;
   createdAt?: string | null;
   startedAt?: string | null;
+  resumeOffset?: number;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  createdTime?: string | null;
+  hasThumbnail?: boolean;
 }
 
 const formatBytes = (bytes = 0) => {
@@ -53,6 +59,12 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       size: Number(job.bytesTotal || 0),
       mediaId: job.mediaId!,
       mediaUrl: "/api/media/" + job.mediaId,
+      thumbnailUrl: job.hasThumbnail ? "/api/media/" + job.mediaId + "/thumbnail" : undefined,
+      width: job.width,
+      height: job.height,
+      durationMs: job.durationMs,
+      createdTime: job.createdTime,
+      sourceProvider: job.provider,
     })));
     const response = await fetch("/api/import-jobs/acknowledge", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ready.map(job => job.id) }),
@@ -174,7 +186,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
               <div className={"h-full bg-gradient-to-r from-[#B77A2D] via-[#F5D77F] to-[#FFF2A8] transition-[width] duration-500 " + (active && !total ? "animate-pulse" : "")} style={{ width: (total ? percent : active ? Math.max(8, percent) : percent) + "%" }} />
             </div>
             <div className="flex justify-between gap-3 mt-1.5 text-[10px] font-mono text-[#C8B1E4]">
-              <span>{job.status === "queued" ? "Waiting for transfer…" : job.status === "transferring" && !total ? "Preparing secure video stream…" : total ? formatBytes(transferred) + " of " + formatBytes(total) : job.status.replaceAll("_", " ")}</span>
+              <span>{job.status === "queued" && Number(job.resumeOffset || 0) > 0 ? "Ready to resume from " + formatBytes(Number(job.resumeOffset)) : job.status === "queued" ? "Waiting for transfer…" : job.status === "transferring" && !total ? "Preparing secure video stream…" : total ? formatBytes(transferred) + " of " + formatBytes(total) : job.status.replaceAll("_", " ")}</span>
               {active && bytesPerSecond > 0 && <span className="shrink-0">{formatBytes(bytesPerSecond)}/s · {formatDuration(remainingSeconds)} left</span>}
             </div>
             <div className="flex items-start justify-between gap-2 mt-2">

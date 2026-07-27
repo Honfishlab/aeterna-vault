@@ -57,6 +57,12 @@ export interface AlbumFileItem {
   size: number;
   mimeType?: string;
   storedMediaUrl?: string;
+  thumbnailUrl?: string;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  createdTime?: string | null;
+  sourceProvider?: string;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -327,11 +333,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     if (!title) setTitle(items.length === 1 ? (items[0].name.split(".").slice(0, -1).join(".") || items[0].name) : "Imported Google Drive Album");
     setAlbumFiles(previous => [...previous, ...items.map(item => ({
       id: "google-" + item.id,
-      previewUrl: item.mediaUrl,
+      previewUrl: item.thumbnailUrl || item.mediaUrl,
       storedMediaUrl: item.mediaUrl,
       mimeType: item.mimeType,
       name: item.name,
       size: item.size,
+      thumbnailUrl: item.thumbnailUrl,
+      width: item.width,
+      height: item.height,
+      durationMs: item.durationMs,
+      createdTime: item.createdTime,
+      sourceProvider: item.sourceProvider,
     }))]);
   };
 
@@ -652,7 +664,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             date: formattedDateString,
             time: time || undefined,
             location: location || 'Sovereign Album Node',
-            imageUrl: !contentType.startsWith('image/') ? 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800' : storedMediaUrl,
+            imageUrl: contentType.startsWith("image/") ? storedMediaUrl : (item.thumbnailUrl || "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800"),
+            thumbnailUrl: item.thumbnailUrl,
+            fileSizeBytes: item.size,
+            width: item.width || undefined,
+            height: item.height || undefined,
+            durationMs: item.durationMs || undefined,
+            sourceProvider: item.sourceProvider,
+            sourceCreatedAt: item.createdTime || undefined,
             videoUrl: contentType.startsWith('video/') ? storedMediaUrl : undefined,
             mediaType: contentType.startsWith('video/') ? 'video' : contentType === 'application/pdf' ? 'document' : 'photo',
             description: description || `Preserved in Album "${title}" with ${totalItems} total files.`,

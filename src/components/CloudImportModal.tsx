@@ -10,6 +10,11 @@ export interface ImportedCloudMedia {
   mediaId: string;
   mediaUrl: string;
   createdTime?: string | null;
+  thumbnailUrl?: string;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  sourceProvider?: string;
 }
 
 interface ProviderStatus {

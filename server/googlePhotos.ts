@@ -48,6 +48,8 @@ export async function queuePhotosItems(userId: string, id: string) {
     const reportedMimeType = String(file.mimeType || "").toLowerCase().split(";", 1)[0].trim();
     const isVideo = itemType === "VIDEO" || reportedMimeType.startsWith("video/") || Boolean(file.mediaFileMetadata?.videoMetadata);
     const mimeType = isVideo ? (reportedMimeType.startsWith("video/") ? reportedMimeType : "video/mp4") : (reportedMimeType || (itemType === "PHOTO" ? "image/jpeg" : ""));
+    const metadata = file.mediaFileMetadata || {};
+    const durationMillis = Number(metadata.videoMetadata?.durationMillis || metadata.videoMetadata?.duration || 0) || null;
     if (!item.id || !mediaTypeAllowed(mimeType)) continue;
     const jobId = crypto.randomUUID();
     const name = String(file.filename || (isVideo ? "Google Photos video" : "Google Photos media")).slice(0,255);
@@ -58,7 +60,7 @@ export async function queuePhotosItems(userId: string, id: string) {
       continue;
     }
     if (!file.baseUrl) continue;
-    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,attempts=0,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", baseUrl: file.baseUrl, mimeType: mimeType, type: item.type, createTime: item.createTime || null, videoProcessingStatus: file.mediaFileMetadata?.videoMetadata?.processingStatus || null })]);
+    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,attempts=0,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", baseUrl: file.baseUrl, mimeType: mimeType, type: item.type, createTime: item.createTime || null, width: Number(metadata.width || 0) || null, height: Number(metadata.height || 0) || null, durationMillis, videoProcessingStatus: metadata.videoMetadata?.processingStatus || null })]);
     jobs.push({ id: jobId, name, mimeType, status: "queued", progress: 0 });
   }
   await execute("UPDATE provider_picker_sessions SET status=$$queued$$,updated_at=NOW() WHERE id=$1", [id]);

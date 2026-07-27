@@ -171,6 +171,21 @@ export async function GET(request: Request) {
       return json({ data: rows[0]?.data ?? null, revision: Number(rows[0]?.revision || 0) });
     } catch (error) { return json(databaseError(error), 503); }
   }
+  if (route.startsWith("media/") && route.endsWith("/thumbnail")) {
+    if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
+    try {
+      const user = await authenticatedUser(request);
+      if (!user) return json({ error: "Authentication required." }, 401);
+      const mediaId = route.split("/")[1];
+      const rows = await query<{ thumbnail_object_key: string }>("SELECT thumbnail_object_key FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND thumbnail_object_key IS NOT NULL LIMIT 1", [mediaId, user.id, "ready"]);
+      if (!rows[0]) return json({ error: "Video thumbnail not found." }, 404);
+      const { client, GetObjectCommand } = await r2Modules();
+      const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: rows[0].thumbnail_object_key }));
+      const responseBody = object.Body?.transformToWebStream ? object.Body.transformToWebStream() : object.Body;
+      return new Response(responseBody, { headers: { "Content-Type": object.ContentType || "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff" } });
+    } catch (error) { console.error("R2 thumbnail read failed", error); return json({ error: "Video thumbnail is temporarily unavailable." }, 502); }
+  }
+
   if (route.startsWith("media/") && route.split("/").length === 2) {
     if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
     try {

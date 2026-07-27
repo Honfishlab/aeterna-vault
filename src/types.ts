@@ -43,6 +43,13 @@ export interface MemoryItem {
   imageUrl?: string;
   videoUrl?: string;
   mediaType?: 'photo' | 'video' | 'document';
+  thumbnailUrl?: string;
+  fileSizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  sourceProvider?: string;
+  sourceCreatedAt?: string;
   description: string;
   encryptionLevel: 'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof';
   permawebTxId: string;
