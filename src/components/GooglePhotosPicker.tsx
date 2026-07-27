@@ -1,40 +1,97 @@
-import React, { useState } from "react";
-import { Images, Loader2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Images, Loader2, RefreshCw } from "lucide-react";
+
+type Phase = "idle" | "selecting" | "queueing" | "queued";
 
 export function GooglePhotosPicker() {
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState("");
+  const timerRef = useRef<number | null>(null);
 
-  const choose = async () => {
-    setLoading(true);
-    setError("");
-    const response = await fetch("/api/integrations/google-photos/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const session = await response.json();
+  const stopPolling = () => {
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = null;
+  };
+
+  useEffect(() => () => stopPolling(), []);
+
+  const queueSelection = async (id: string) => {
+    setPhase("queueing");
+    const response = await fetch("/api/integrations/google-photos/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: id }),
+    });
+    const body = await response.json();
     if (!response.ok) {
-      setError(session.code === "GOOGLE_PHOTOS_SCOPE_REQUIRED" ? "Disconnect and reconnect Google once to grant Photos Picker access." : session.error || "Google Photos is unavailable.");
-      setLoading(false);
+      setError((body.error || "Selected Photos could not be queued.") + (body.code ? " (" + body.code + ")" : ""));
+      setPhase("selecting");
       return;
     }
-    window.open(session.pickerUri, "aeterna-google-photos", "popup=yes,width=900,height=760");
-    const poll = window.setInterval(async () => {
-      const statusResponse = await fetch("/api/integrations/google-photos/session/" + encodeURIComponent(session.id));
-      const status = await statusResponse.json();
-      if (!status.ready) return;
-      window.clearInterval(poll);
-      const queueResponse = await fetch("/api/integrations/google-photos/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: session.id }) });
-      const queued = await queueResponse.json();
-      if (queueResponse.ok) window.dispatchEvent(new CustomEvent("aeterna-import-jobs", { detail: queued.jobs || [] }));
-      else setError(queued.error || "Selected Photos could not be queued.");
-      setLoading(false);
-    }, 2000);
+    window.dispatchEvent(new CustomEvent("aeterna-import-jobs", { detail: body.jobs || [] }));
+    setPhase("queued");
+    setError(body.jobs?.length ? "" : "Google returned no supported photos or videos for this selection.");
+    stopPolling();
+  };
+
+  const checkSelection = async (id = sessionId) => {
+    if (!id || phase === "queueing" || phase === "queued") return;
+    const response = await fetch("/api/integrations/google-photos/session/" + encodeURIComponent(id));
+    const body = await response.json();
+    if (!response.ok) {
+      setError((body.error || "Unable to check the Photos selection.") + (body.code ? " (" + body.code + ")" : ""));
+      stopPolling();
+      return;
+    }
+    if (body.ready) await queueSelection(id);
+  };
+
+  const choose = async () => {
+    stopPolling();
+    setError("");
+    setPhase("selecting");
+    const response = await fetch("/api/integrations/google-photos/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const session = await response.json();
+    if (!response.ok) {
+      setError(session.code === "GOOGLE_PHOTOS_SCOPE_REQUIRED"
+        ? "Disconnect and reconnect Google once to grant Photos Picker access."
+        : (session.error || "Google Photos is unavailable.") + (session.code ? " (" + session.code + ")" : ""));
+      setPhase("idle");
+      return;
+    }
+    setSessionId(session.id);
+    const popup = window.open(session.pickerUri, "aeterna-google-photos", "popup=yes,width=900,height=760");
+    if (!popup) {
+      setError("Allow popups for Aeterna Vault, then try again.");
+      setPhase("idle");
+      return;
+    }
+    timerRef.current = window.setInterval(() => checkSelection(session.id), 5000);
   };
 
   return (
-    <div>
-      <button onClick={choose} disabled={loading} className="gold-filled-btn px-3 py-2 text-xs flex items-center gap-1 disabled:opacity-50">
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Images className="w-3.5 h-3.5" />} Google Photos
-      </button>
-      {error && <p className="text-[10px] text-rose-300 mt-1 max-w-xs">{error}</p>}
+    <div className="max-w-xs">
+      {phase === "idle" ? (
+        <button onClick={choose} className="gold-filled-btn px-3 py-2 text-xs flex items-center gap-1">
+          <Images className="w-3.5 h-3.5" /> Google Photos
+        </button>
+      ) : phase === "queued" ? (
+        <button onClick={choose} className="gold-beveled-btn px-3 py-2 text-xs flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Select more Photos
+        </button>
+      ) : (
+        <button onClick={() => checkSelection()} disabled={phase === "queueing"} className="gold-filled-btn px-3 py-2 text-xs flex items-center gap-1 disabled:opacity-60">
+          {phase === "queueing" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {phase === "queueing" ? "Queueing selection..." : "Done selecting? Check now"}
+        </button>
+      )}
+      {phase === "selecting" && !error && <p className="text-[10px] text-[#C8B1E4] mt-1">Click Done in Google Photos, then this will update automatically.</p>}
+      {error && <p className="text-[10px] text-rose-300 mt-1">{error}</p>}
     </div>
   );
 }
