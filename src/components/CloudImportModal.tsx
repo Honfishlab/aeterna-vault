@@ -15,6 +15,7 @@ export interface ImportedCloudMedia {
   height?: number | null;
   durationMs?: number | null;
   sourceProvider?: string;
+  processingStatus?: string | null;
 }
 
 interface ProviderStatus {

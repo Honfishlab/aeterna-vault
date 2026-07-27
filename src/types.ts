@@ -51,6 +51,8 @@ export interface MemoryItem {
   durationMs?: number;
   sourceProvider?: string;
   sourceCreatedAt?: string;
+  mediaId?: string;
+  processingStatus?: 'not_required' | 'queued' | 'processing' | 'ready' | 'failed';
   description: string;
   encryptionLevel: 'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof';
   permawebTxId: string;

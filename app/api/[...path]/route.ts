@@ -173,6 +173,15 @@ export async function GET(request: Request) {
       return json({ data: rows[0]?.data ?? null, revision: Number(rows[0]?.revision || 0) });
     } catch (error) { return json(databaseError(error), 503); }
   }
+  if (route === "media/status") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const ids = (new URL(request.url).searchParams.get("ids") || "").split(",").filter(Boolean).slice(0, 200);
+    if (!ids.length) return json({ media: [] });
+    const media = await query("SELECT id,processing_status AS \"processingStatus\",processing_error AS \"processingError\",thumbnail_object_key IS NOT NULL AS \"hasThumbnail\" FROM media_objects WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, ids]);
+    return json({ media });
+  }
+
   if (route.startsWith("media/") && route.endsWith("/thumbnail")) {
     if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
     try {

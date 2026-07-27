@@ -112,7 +112,7 @@ export async function queueDriveJobs(userId: string, fileIds: string[]) {
 export async function jobStatus(userId: string, ids: string[], history = false) {
   if (history) return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200", [userId]);
   if (ids.length) return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND id=ANY($2::text[]) ORDER BY created_at", [userId, ids.slice(0,500)]);
-  return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND (status IN ($$queued$$,$$transferring$$,$$cancel_requested$$) OR (status IN ($$failed$$,$$cancelled$$) AND updated_at>NOW()-INTERVAL $$7 days$$) OR (status=$$complete$$ AND delivered_at IS NULL)) ORDER BY created_at DESC LIMIT 100", [userId]);
+  return query("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND (status IN ($$queued$$,$$transferring$$,$$cancel_requested$$) OR (status IN ($$failed$$,$$cancelled$$) AND updated_at>NOW()-INTERVAL $$7 days$$) OR (status=$$complete$$ AND delivered_at IS NULL) OR EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.processing_status IN ($$queued$$,$$processing$$,$$failed$$))) ORDER BY created_at DESC LIMIT 100", [userId]);
 }
 
 export async function cancelImportJob(userId: string, id: string) {

@@ -22,6 +22,8 @@ interface Job {
   durationMs?: number | null;
   createdTime?: string | null;
   hasThumbnail?: boolean;
+  processingStatus?: string | null;
+  processingError?: string | null;
 }
 
 const formatBytes = (bytes = 0) => {
@@ -38,7 +40,16 @@ const formatDuration = (seconds: number) => {
   return Math.floor(seconds / 3600) + " hr " + Math.ceil((seconds % 3600) / 60) + " min";
 };
 
-export function BackgroundImportProgress({ onImported }: { onImported: (items: ImportedCloudMedia[]) => void }) {
+export interface ImportActivitySummary {
+  transferring: number;
+  processing: number;
+  issues: number;
+}
+
+export function BackgroundImportProgress({ onImported, onStatusChange }: {
+  onImported: (items: ImportedCloudMedia[]) => void;
+  onStatusChange?: (summary: ImportActivitySummary) => void;
+}) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [actionId, setActionId] = useState("");
   const [photoSessions, setPhotoSessions] = useState<string[]>([]);
@@ -47,6 +58,14 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   const delivering = useRef(new Set<string>());
   const onImportedRef = useRef(onImported);
   onImportedRef.current = onImported;
+
+  useEffect(() => {
+    onStatusChange?.({
+      transferring: jobs.filter(job => ["queued", "transferring", "cancel_requested"].includes(job.status)).length + photoSessions.length,
+      processing: jobs.filter(job => job.status === "complete" && ["queued", "processing"].includes(job.processingStatus || "")).length,
+      issues: jobs.filter(job => ["failed", "cancelled"].includes(job.status) || job.processingStatus === "failed").length,
+    });
+  }, [jobs, photoSessions, onStatusChange]);
 
   const deliverCompleted = async (items: Job[]) => {
     const ready = items.filter(job => job.status === "complete" && job.mediaId && !job.deliveredAt && !delivering.current.has(job.id));
@@ -65,6 +84,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       durationMs: job.durationMs,
       createdTime: job.createdTime,
       sourceProvider: job.provider,
+      processingStatus: job.processingStatus,
     })));
     const response = await fetch("/api/import-jobs/acknowledge", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ready.map(job => job.id) }),
@@ -104,9 +124,9 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   }, []);
 
   useEffect(() => {
-    if (!jobs.some(job => job.status === "complete" && job.deliveredAt)) return;
+    if (!jobs.some(job => job.status === "complete" && job.deliveredAt && !["queued", "processing"].includes(job.processingStatus || ""))) return;
     const timer = window.setTimeout(() => {
-      setJobs(previous => previous.filter(job => !(job.status === "complete" && job.deliveredAt)));
+      setJobs(previous => previous.filter(job => !(job.status === "complete" && job.deliveredAt && !["queued", "processing"].includes(job.processingStatus || ""))));
     }, 5000);
     return () => window.clearTimeout(timer);
   }, [jobs]);
@@ -142,7 +162,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   }, [photoSessions]);
 
   useEffect(() => {
-    if (!jobs.some(job => ["queued", "transferring", "cancel_requested"].includes(job.status))) return;
+    if (!jobs.some(job => ["queued", "transferring", "cancel_requested"].includes(job.status) || ["queued", "processing"].includes(job.processingStatus || ""))) return;
     const timer = window.setInterval(refresh, 2000);
     return () => window.clearInterval(timer);
   }, [jobs]);
@@ -176,6 +196,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
         const bytesPerSecond = elapsedSeconds && transferred ? transferred / elapsedSeconds : 0;
         const remainingSeconds = bytesPerSecond && total > transferred ? (total - transferred) / bytesPerSecond : Number.NaN;
         const active = ["queued", "transferring", "cancel_requested"].includes(job.status);
+        const optimizing = job.status === "complete" && ["queued", "processing"].includes(job.processingStatus || "");
         return (
           <div key={job.id} className="border-t border-[#DFB260]/15 pt-3 first:border-0">
             <div className="flex justify-between gap-3 text-xs">
@@ -186,11 +207,11 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
               <div className={"h-full bg-gradient-to-r from-[#B77A2D] via-[#F5D77F] to-[#FFF2A8] transition-[width] duration-500 " + (active && !total ? "animate-pulse" : "")} style={{ width: (total ? percent : active ? Math.max(8, percent) : percent) + "%" }} />
             </div>
             <div className="flex justify-between gap-3 mt-1.5 text-[10px] font-mono text-[#C8B1E4]">
-              <span>{job.status === "queued" && Number(job.resumeOffset || 0) > 0 ? "Ready to resume from " + formatBytes(Number(job.resumeOffset)) : job.status === "queued" ? "Waiting for transfer…" : job.status === "transferring" && !total ? "Preparing secure video stream…" : total ? formatBytes(transferred) + " of " + formatBytes(total) : job.status.replaceAll("_", " ")}</span>
+              <span>{optimizing ? "Transfer complete · optimizing video and thumbnails…" : job.status === "queued" && Number(job.resumeOffset || 0) > 0 ? "Ready to resume from " + formatBytes(Number(job.resumeOffset)) : job.status === "queued" ? "Waiting for transfer…" : job.status === "transferring" && !total ? "Preparing secure video stream…" : total ? formatBytes(transferred) + " of " + formatBytes(total) : job.status.replaceAll("_", " ")}</span>
               {active && bytesPerSecond > 0 && <span className="shrink-0">{formatBytes(bytesPerSecond)}/s · {formatDuration(remainingSeconds)} left</span>}
             </div>
             <div className="flex items-start justify-between gap-2 mt-2">
-              <div>{job.error && <p className="text-[10px] text-rose-300">{job.error}</p>}{expired && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("aeterna-reselect-google-photos"))} className="text-[10px] text-[#F5D77F] underline underline-offset-2">Select this item again in Google Photos</button>}</div>
+              <div>{(job.error || job.processingError) && <p className="text-[10px] text-rose-300">{job.error || job.processingError}</p>}{expired && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("aeterna-reselect-google-photos"))} className="text-[10px] text-[#F5D77F] underline underline-offset-2">Select this item again in Google Photos</button>}</div>
               {["queued","transferring","cancel_requested"].includes(job.status) && <button onClick={() => act(job, "cancel")} disabled={Boolean(actionId)} className="text-[10px] text-rose-300 flex items-center gap-1"><Ban className="w-3 h-3" /> Cancel</button>}
               {["failed","cancelled"].includes(job.status) && !expired && <button onClick={() => act(job, "retry")} disabled={Boolean(actionId)} className="text-[10px] text-[#F5D77F] flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Retry</button>}
             </div>

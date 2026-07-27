@@ -36,7 +36,8 @@ import {
   Info,
   Download,
   Globe,
-  Play
+  Play,
+  Loader2
 } from 'lucide-react';
 
 interface SearchViewProps {
@@ -62,6 +63,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
   const [selectedImage, setSelectedImage] = useState<MemoryItem | null>(null);
+  const [mediaProcessing, setMediaProcessing] = useState<Record<string, string>>({});
   const [showLightboxInfo, setShowLightboxInfo] = useState(false);
   const [showAlbumCreatedToast, setShowAlbumCreatedToast] = useState(false);
   const [createdAlbumName, setCreatedAlbumName] = useState('');
@@ -360,6 +362,25 @@ export const SearchView: React.FC<SearchViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedImage, filteredMemories]);
 
+  const trackedVideoIds = useMemo(() => memories.filter(item => item.mediaType === 'video' && item.mediaId).map(item => item.mediaId as string), [memories]);
+
+  useEffect(() => {
+    if (!trackedVideoIds.length) { setMediaProcessing({}); return; }
+    let active = true;
+    let timer: number | undefined;
+    const refresh = async () => {
+      const response = await fetch('/api/media/status?ids=' + encodeURIComponent(trackedVideoIds.join(',')));
+      if (!response.ok) return;
+      const body = await response.json();
+      if (!active) return;
+      const next = Object.fromEntries((body.media || []).map((item: any) => [item.id, item.processingStatus]));
+      setMediaProcessing(next);
+      if (Object.values(next).some(status => status === 'queued' || status === 'processing')) timer = window.setTimeout(refresh, 5000);
+    };
+    void refresh();
+    return () => { active = false; if (timer) window.clearTimeout(timer); };
+  }, [trackedVideoIds]);
+
   // Album summary cards grouping with lead/cover photo resolution
   const albumGroups = useMemo(() => {
     const map = new Map<string, MemoryItem[]>();
@@ -610,6 +631,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   : 'Vault Memories & Permaweb Albums'}
               </span>
             </h1>
+
+            {currentActiveAlbum && (() => {
+              const pending = currentActiveAlbum.items.filter(item => item.mediaId && ['queued', 'processing'].includes(mediaProcessing[item.mediaId] || item.processingStatus || '')).length;
+              const failed = currentActiveAlbum.items.filter(item => item.mediaId && (mediaProcessing[item.mediaId] || item.processingStatus) === 'failed').length;
+              return pending || failed ? <div className="flex items-center gap-2 text-xs">
+                {pending > 0 && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/40 bg-amber-300/10 px-2.5 py-1 text-amber-100"><Loader2 className="w-3.5 h-3.5 animate-spin" />{pending} {pending === 1 ? 'video is' : 'videos are'} still optimizing</span>}
+                {failed > 0 && <span className="rounded-full border border-rose-300/40 bg-rose-300/10 px-2.5 py-1 text-rose-200">{failed} video processing {failed === 1 ? 'issue' : 'issues'}</span>}
+              </div> : null;
+            })()}
 
             <p className="text-xs sm:text-sm text-[#C8B1E4] font-medium flex items-center gap-2">
               <span>Showing <strong className="text-[#F5D77F]">{filteredMemories.length}</strong> {filteredMemories.length === 1 ? 'entry' : 'entries'} in live vault index</span>

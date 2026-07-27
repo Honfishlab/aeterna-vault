@@ -9,7 +9,7 @@ import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
 import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
-import { BackgroundImportProgress } from './BackgroundImportProgress';
+import { BackgroundImportProgress, ImportActivitySummary } from './BackgroundImportProgress';
 import { 
   Upload, 
   X, 
@@ -63,6 +63,8 @@ export interface AlbumFileItem {
   durationMs?: number | null;
   createdTime?: string | null;
   sourceProvider?: string;
+  mediaId?: string;
+  processingStatus?: string | null;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -74,6 +76,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   // Upload mode: 'single' or 'album'
   const [uploadMode, setUploadMode] = useState<'single' | 'album'>('single');
   const [cloudImportOpen, setCloudImportOpen] = useState(false);
+  const [cloudActivity, setCloudActivity] = useState<ImportActivitySummary>({ transferring: 0, processing: 0, issues: 0 });
 
   // Form states
   const [title, setTitle] = useState('');
@@ -304,6 +307,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (uploadMode === 'album' && cloudActivity.transferring > 0) return;
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -344,6 +348,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       durationMs: item.durationMs,
       createdTime: item.createdTime,
       sourceProvider: item.sourceProvider,
+      mediaId: item.mediaId,
+      processingStatus: item.processingStatus,
     }))]);
   };
 
@@ -473,6 +479,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   const handleStartArchiving = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadMode === 'album') {
+      const activityResponse = await fetch('/api/import-jobs');
+      if (activityResponse.ok) {
+        const activityBody = await activityResponse.json();
+        const transferring = (activityBody.jobs || []).filter((job: any) => ['queued', 'transferring', 'cancel_requested'].includes(job.status)).length;
+        if (transferring > 0) { setCloudActivity(previous => ({ ...previous, transferring })); return; }
+      }
+    }
     if (!title) return;
 
     setIsArchiving(true);
@@ -672,6 +686,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             durationMs: item.durationMs || undefined,
             sourceProvider: item.sourceProvider,
             sourceCreatedAt: item.createdTime || undefined,
+            mediaId: item.mediaId,
+            processingStatus: (item.processingStatus || undefined) as MemoryItem['processingStatus'],
             videoUrl: contentType.startsWith('video/') ? storedMediaUrl : undefined,
             mediaType: contentType.startsWith('video/') ? 'video' : contentType === 'application/pdf' ? 'document' : 'photo',
             description: description || `Preserved in Album "${title}" with ${totalItems} total files.`,
@@ -801,7 +817,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             )}
           </div>
 
-          <BackgroundImportProgress onImported={handleCloudImported} />
+          <BackgroundImportProgress onImported={handleCloudImported} onStatusChange={setCloudActivity} />
 
           {/* Mode Banner Explanation */}
           <div className="bg-[#1A0C33] p-3 rounded-2xl border border-[#DFB260]/30 flex items-start space-x-2.5 text-xs text-[#C8B1E4]">
@@ -1411,6 +1427,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
             </div>
 
+            {cloudActivity.transferring > 0 && (
+              <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-amber-100 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span>Waiting for {cloudActivity.transferring} Google {cloudActivity.transferring === 1 ? 'item' : 'items'} to finish transferring. Every original must arrive before this album can be archived.</span>
+              </div>
+            )}
+            {cloudActivity.processing > 0 && cloudActivity.transferring === 0 && (
+              <div className="rounded-xl border border-[#DFB260]/35 bg-[#DFB260]/10 px-3 py-2 text-[#FFF2A8]">
+                {cloudActivity.processing} {cloudActivity.processing === 1 ? 'video is' : 'videos are'} safely stored and still optimizing thumbnails and playback. You may archive now.
+              </div>
+            )}
+
             {/* Submit Action Bar */}
             <div className="pt-3 flex items-center justify-end space-x-3 font-semibold">
               <button
@@ -1422,7 +1450,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="gold-filled-btn px-6 py-2.5 text-xs cursor-pointer flex items-center space-x-2"
+                disabled={cloudActivity.transferring > 0}
+                className="gold-filled-btn px-6 py-2.5 text-xs cursor-pointer flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>
