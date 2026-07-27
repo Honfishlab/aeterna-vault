@@ -16,7 +16,7 @@ while (!stopping) {
     });
     if (!response.ok) console.error("Import worker request failed:", response.status, await response.text());
     const result = response.ok ? await response.json() : null;
-    await wait(result?.job ? 250 : 3000);
+    await wait(result?.busy ? 3000 : 1000);
   } catch (error) {
     console.error("Import worker connection failed:", error);
     await wait(5000);

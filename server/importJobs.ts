@@ -6,6 +6,7 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
 const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,error_message AS error,attempts,created_at AS \"createdAt\",updated_at AS \"updatedAt\",delivered_at AS \"deliveredAt\"";
 let lastCleanupAt = 0;
+let workerBusy = false;
 
 export async function queueDriveJobs(userId: string, fileIds: string[]) {
   const auth = await googleAccess(userId);
@@ -64,6 +65,15 @@ export async function maintainImportQueue() {
   }
 }
 
+export function startImportWorker() {
+  if (workerBusy) return { accepted: false, busy: true };
+  workerBusy = true;
+  void processNextImportJob()
+    .catch(error => console.error("Background import failed", error))
+    .finally(() => { workerBusy = false; });
+  return { accepted: true, busy: false };
+}
+
 export async function processNextImportJob() {
   await maintainImportQueue();
   const rows = await query<any>("UPDATE media_import_jobs SET status=$$transferring$$,started_at=NOW(),attempts=attempts+1,progress=GREATEST(progress,1),updated_at=NOW() WHERE id=(SELECT id FROM media_import_jobs WHERE status=$$queued$$ AND attempts<3 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *");
@@ -74,6 +84,9 @@ export async function processNextImportJob() {
     const payload = job.provider_payload || {};
     let downloadUrl: string;
     const mimeType = payload.mimeType || "application/octet-stream";
+    if (mimeType.startsWith("video/") && payload.videoProcessingStatus && payload.videoProcessingStatus !== "READY") {
+      throw new Error("GOOGLE_VIDEO_NOT_READY_" + payload.videoProcessingStatus);
+    }
     if (payload.provider === "google-photos") downloadUrl = payload.baseUrl + (mimeType.startsWith("video/") ? "=dv" : "=d");
     else downloadUrl = DRIVE_API + "/files/" + encodeURIComponent(job.provider_file_id) + "?alt=media";
     const download = await fetch(downloadUrl, { headers: { Authorization: "Bearer " + auth.token } });
@@ -113,9 +126,10 @@ export async function processNextImportJob() {
     const state = await query<{ status: string }>("SELECT status FROM media_import_jobs WHERE id=$1", [job.id]);
     const cancelled = state[0]?.status === "cancel_requested";
     const expired = error?.message === "PHOTOS_SELECTION_EXPIRED";
-    const retry = !cancelled && !expired && Number(job.attempts || 0) < 3;
+    const videoNotReady = String(error?.message || "").startsWith("GOOGLE_VIDEO_NOT_READY_");
+    const retry = !cancelled && !expired && !videoNotReady && Number(job.attempts || 0) < 3;
     const status = cancelled ? "cancelled" : retry ? "queued" : "failed";
-    const message = expired ? "Google Photos selection expired. Select the items again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
+    const message = expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
     await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,updated_at=NOW() WHERE id=$3", [status, message, job.id]);
     return { id: job.id, status };
   }

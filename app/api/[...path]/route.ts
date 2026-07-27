@@ -3,7 +3,7 @@ import { authenticatedUser, createSession, destroySession, hashPassword, normali
 import { mediaTypeAllowed, r2Bucket, r2Configured, r2Modules, safeObjectName } from "../../../server/r2";
 import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogleDrive, googleConnectionStatus, googleDriveConfigured, googleThumbnail, importGoogleMedia, listGoogleMedia } from "../../../server/googleDrive";
 import { createPhotosSession, pollPhotosSession, queuePhotosItems } from "../../../server/googlePhotos";
-import { acknowledgeImportJobs, cancelImportJob, jobStatus, processNextImportJob, queueDriveJobs, retryImportJob } from "../../../server/importJobs";
+import { acknowledgeImportJobs, cancelImportJob, jobStatus, queueDriveJobs, retryImportJob, startImportWorker } from "../../../server/importJobs";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -256,7 +256,7 @@ export async function POST(request: Request) {
 
   if (route === "internal/import-worker") {
     if (!process.env.IMPORT_WORKER_SECRET || request.headers.get("authorization") !== "Bearer " + process.env.IMPORT_WORKER_SECRET.trim()) return json({ error: "Unauthorized." }, 401);
-    return json({ job: await processNextImportJob() });
+    return json(startImportWorker());
   }
 
   if (route === "import-jobs/queue-drive" || route === "integrations/google-photos/session" || route === "integrations/google-photos/queue") {
