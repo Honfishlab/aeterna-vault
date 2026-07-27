@@ -35,7 +35,8 @@ import {
   ExternalLink,
   Info,
   Download,
-  Globe
+  Globe,
+  Play
 } from 'lucide-react';
 
 interface SearchViewProps {
@@ -824,18 +825,41 @@ export const SearchView: React.FC<SearchViewProps> = ({
               >
                 {/* Image Container */}
                 <div className="relative w-full h-full overflow-hidden bg-[#120B21]">
-                  <img
-                    src={mem.imageUrl || 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800'}
-                    alt={mem.title}
-                    referrerPolicy="no-referrer"
-                    onClick={(e) => {
-                      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                        e.stopPropagation();
-                        setSelectedImage(mem);
-                      }
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
-                  />
+                  {Boolean(mem.videoUrl) || mem.mediaType === "video" ? (
+                    <>
+                      <video
+                        src={mem.videoUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onClick={(e) => {
+                          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                            e.stopPropagation();
+                            setSelectedImage(mem);
+                          }
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="w-16 h-16 rounded-full bg-black/65 border-2 border-[#F5D77F] text-[#FFF2A8] flex items-center justify-center shadow-2xl backdrop-blur-md">
+                          <Play className="w-7 h-7 fill-current ml-1" />
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <img
+                      src={mem.imageUrl || "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800"}
+                      alt={mem.title}
+                      referrerPolicy="no-referrer"
+                      onClick={(e) => {
+                        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                          e.stopPropagation();
+                          setSelectedImage(mem);
+                        }
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0F081D] via-[#0F081D]/40 to-transparent"></div>
 
                   {/* Top Badges & Multi-Selection Checkbox */}
@@ -1492,7 +1516,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       {selectedImage && (
         <ImageViewerModal
           image={selectedImage}
-          images={filteredMemories.filter(item => Boolean(item.imageUrl)).map(item => ({ ...item, imageUrl: item.imageUrl! }))}
+          images={filteredMemories.filter(item => Boolean(item.imageUrl || item.videoUrl))}
           onSelectImage={(item) => setSelectedImage(item as MemoryItem)}
           onClose={() => setSelectedImage(null)}
           onPrev={() => {

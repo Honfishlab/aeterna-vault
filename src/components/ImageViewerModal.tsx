@@ -7,7 +7,9 @@ import {
 
 export interface ImageViewerData {
   id?: string;
-  imageUrl: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  mediaType?: 'photo' | 'video' | 'document';
   title: string;
   description?: string;
   date?: string;
@@ -94,7 +96,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, onPrev, onNext, hasPrev, hasNext, zoom]);
 
-  useEffect(() => { resetView(); }, [image?.id, image?.imageUrl]);
+  useEffect(() => { resetView(); }, [image?.id, image?.imageUrl, image?.videoUrl]);
 
   useEffect(() => {
     if (!isPlaying || !onNext || !hasNext) return;
@@ -118,6 +120,8 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   if (!image) return null;
 
+  const isVideo = image.mediaType === 'video' || Boolean(image.videoUrl);
+  const mediaUrl = isVideo ? image.videoUrl : image.imageUrl;
   const txId = image.permawebTxId || 'ar_9xK2mP1a8f331';
   const arweaveUrl = `https://arweave.net/${txId}`;
   const encryption = image.encryptionLevel || 'AES-GCM-256 Vault';
@@ -176,7 +180,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           )}
 
           <a
-            href={image.imageUrl}
+            href={mediaUrl}
             target="_blank"
             rel="noreferrer"
             className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer hidden sm:flex"
@@ -247,19 +251,38 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onPointerUp={() => setIsDragging(false)}
           onPointerCancel={() => setIsDragging(false)}
         >
-          <img
-            src={image.imageUrl}
-            alt={image.title}
-            onClick={(e) => e.stopPropagation()}
-            referrerPolicy="no-referrer"
-            draggable={false}
-            className={(isDragging ? 'max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20' : 'max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20 transition-transform duration-500 ease-out') + (isPlaying ? ' viewer-ken-burns' : '')}
-            style={{
-              maxHeight: 'calc(100vh - 120px)',
-              maxWidth: showInfo ? 'calc(100vw - 380px)' : '100vw',
-              transform: 'translate3d(' + position.x + 'px, ' + position.y + 'px, 0) scale(' + zoom + ') rotate(' + rotation + 'deg)'
-            }}
-          />
+          {isVideo && mediaUrl ? (
+            <video
+              key={mediaUrl}
+              src={mediaUrl}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-2xl border border-[#DFB260]/20 bg-black"
+              style={{
+                maxHeight: "calc(100vh - 120px)",
+                maxWidth: showInfo ? "calc(100vw - 380px)" : "100vw"
+              }}
+            >
+              Your browser does not support video playback.
+            </video>
+          ) : (
+            <img
+              src={image.imageUrl}
+              alt={image.title}
+              onClick={(e) => e.stopPropagation()}
+              referrerPolicy="no-referrer"
+              draggable={false}
+              className={(isDragging ? "max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20" : "max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg shadow-2xl border border-[#DFB260]/20 transition-transform duration-500 ease-out") + (isPlaying ? " viewer-ken-burns" : "")}
+              style={{
+                maxHeight: "calc(100vh - 120px)",
+                maxWidth: showInfo ? "calc(100vw - 380px)" : "100vw",
+                transform: "translate3d(" + position.x + "px, " + position.y + "px, 0) scale(" + zoom + ") rotate(" + rotation + "deg)"
+              }}
+            />
+          )}
 
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-1 rounded-full bg-black/75 border border-white/20 p-1.5 backdrop-blur-xl">
             <button onClick={() => changeZoom(zoom - 0.25)} className="p-2"><ZoomOut className="w-4 h-4" /></button>
@@ -305,7 +328,14 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 max-w-[80vw] overflow-x-auto rounded-2xl bg-black/65 border border-white/15 p-2 backdrop-blur-xl flex gap-2">
               {images.map((item, index) => (
                 <button key={item.id || item.imageUrl} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSelectImage?.(item); }} className="relative flex-none w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden border-2 opacity-75 hover:opacity-100 transition-all" style={{ borderColor: item.id === image.id ? "#F5D77F" : "transparent" }} title={String(index + 1) + ". " + item.title}>
-                  <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                  {item.mediaType === "video" || item.videoUrl ? (
+                    <>
+                      <video src={item.videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-5 h-5 fill-white text-white drop-shadow-lg" /></span>
+                    </>
+                  ) : (
+                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                  )}
                 </button>
               ))}
             </div>
@@ -573,7 +603,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               )}
 
               <a
-                href={image.imageUrl}
+                href={mediaUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="gold-beveled-btn w-full text-xs py-2 text-[#FFF2A8] font-bold flex items-center justify-center gap-2 cursor-pointer"
