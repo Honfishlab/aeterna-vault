@@ -37,6 +37,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   const [actionId, setActionId] = useState("");
   const [photoSessions, setPhotoSessions] = useState<string[]>([]);
   const [photoSessionError, setPhotoSessionError] = useState("");
+  const [now, setNow] = useState(0);
   const delivering = useRef(new Set<string>());
   const onImportedRef = useRef(onImported);
   onImportedRef.current = onImported;
@@ -69,6 +70,8 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
   };
 
   useEffect(() => {
+    setNow(Date.now());
+    const clock = window.setInterval(() => setNow(Date.now()), 2000);
     refresh();
     const receive = (event: Event) => {
       const incoming = (event as CustomEvent<Job[]>).detail || [];
@@ -84,6 +87,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
     return () => {
       window.removeEventListener("aeterna-import-jobs", receive);
       window.removeEventListener("aeterna-google-photos-session", receivePhotoSession);
+      window.clearInterval(clock);
     };
   }, []);
 
@@ -99,7 +103,6 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
           const status = await statusResponse.json();
           if (!statusResponse.ok) {
             setPhotoSessionError(status.error || "Google Photos selection could not be checked.");
-            setPhotoSessions(previous => previous.filter(value => value !== id));
             continue;
           }
           if (!status.ready) continue;
@@ -114,7 +117,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       } finally { checking = false; }
     };
     void checkSessions();
-    const timer = window.setInterval(checkSessions, 3000);
+    const timer = window.setInterval(checkSessions, 5000);
     return () => window.clearInterval(timer);
   }, [photoSessions]);
 
@@ -149,7 +152,7 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
         const total = Number(job.bytesTotal || 0);
         const percent = job.status === "complete" ? 100 : Math.max(0, Math.min(99, Number(job.progress || 0)));
         const started = job.startedAt ? new Date(job.startedAt).getTime() : 0;
-        const elapsedSeconds = started ? Math.max(1, (Date.now() - started) / 1000) : 0;
+        const elapsedSeconds = started && now ? Math.max(1, (now - started) / 1000) : 0;
         const bytesPerSecond = elapsedSeconds && transferred ? transferred / elapsedSeconds : 0;
         const remainingSeconds = bytesPerSecond && total > transferred ? (total - transferred) / bytesPerSecond : Number.NaN;
         const active = ["queued", "transferring", "cancel_requested"].includes(job.status);

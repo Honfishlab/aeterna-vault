@@ -19,8 +19,10 @@ export async function pollPhotosSession(userId: string, id: string) {
   if (!rows[0]) throw new Error("PHOTOS_SESSION_NOT_FOUND");
   const auth = await googleAccess(userId);
   const response = await fetch(API + "/sessions/" + encodeURIComponent(rows[0].provider_session_id), { headers: { Authorization: "Bearer " + auth.token } });
-  const session: any = await response.json();
-  if (!response.ok) throw new Error("PHOTOS_SESSION_FAILED");
+  const raw = await response.text();
+  let session: any = {};
+  try { session = raw ? JSON.parse(raw) : {}; } catch { session = {}; }
+  if (!response.ok) throw new Error("PHOTOS_SESSION_HTTP_" + response.status + "_" + String(session.error?.status || "UNKNOWN"));
   return { ready: Boolean(session.mediaItemsSet), pollingConfig: session.pollingConfig || null };
 }
 
@@ -51,7 +53,7 @@ export async function queuePhotosItems(userId: string, id: string) {
     const name = String(file.filename || (isVideo ? "Google Photos video" : "Google Photos media")).slice(0,255);
     if (isVideo && !file.baseUrl) {
       const error = "Google Photos did not provide a downloadable URL. Wait until the video plays in Google Photos, then select it again.";
-      await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,error_message) VALUES (,,,,,2688618,::jsonb,) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=2688618,provider_payload=EXCLUDED.provider_payload,error_message=EXCLUDED.error_message,bytes_transferred=0,progress=0,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", mimeType, type: item.type }), error]);
+      await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,error_message) VALUES ($1,$2,$3,$4,$5,$$failed$$,$6::jsonb,$7) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$failed$$,provider_payload=EXCLUDED.provider_payload,error_message=EXCLUDED.error_message,bytes_transferred=0,progress=0,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [jobId, userId, rows[0].provider_connection_id, "photos:" + item.id, name, JSON.stringify({ provider: "google-photos", mimeType, type: item.type }), error]);
       jobs.push({ id: jobId, name, mimeType, provider: "google-photos", status: "failed", progress: 0, error });
       continue;
     }
