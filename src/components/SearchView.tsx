@@ -77,6 +77,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
   // Album Editing state
   const [editingAlbumName, setEditingAlbumName] = useState<string | null>(null);
+  const [albumToDelete, setAlbumToDelete] = useState<{ name: string; itemIds: string[] } | null>(null);
   const [editTab, setEditTab] = useState<'details' | 'photos' | 'add'>('details');
   const [editAlbumTitle, setEditAlbumTitle] = useState<string>('');
   const [editAlbumDate, setEditAlbumDate] = useState<string>('');
@@ -230,6 +231,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
       }
       setSelectedGridPhotoIds(prev => prev.filter(itemId => itemId !== id));
     }
+  };
+
+  const requestDeleteAlbum = (albumName: string) => {
+    const itemIds = memories
+      .filter(memory => memory.albumName?.toLowerCase() === albumName.toLowerCase())
+      .map(memory => memory.id);
+    if (itemIds.length) setAlbumToDelete({ name: albumName, itemIds });
+  };
+
+  const handleDeleteAlbum = () => {
+    if (!albumToDelete) return;
+    const deletedIds = new Set(albumToDelete.itemIds);
+    if (onUpdateMemories) {
+      onUpdateMemories(memories.filter(memory => !deletedIds.has(memory.id)));
+    } else if (onDeleteMemory) {
+      albumToDelete.itemIds.forEach(id => onDeleteMemory(id));
+    }
+    setSelectedGridPhotoIds(previous => previous.filter(id => !deletedIds.has(id)));
+    if (selectedImage && deletedIds.has(selectedImage.id)) setSelectedImage(null);
+    if (editingAlbumName?.toLowerCase() === albumToDelete.name.toLowerCase()) setEditingAlbumName(null);
+    if (selectedFilter.toLowerCase() === albumToDelete.name.toLowerCase()) setSelectedFilter("All");
+    setAlbumToDelete(null);
   };
 
   // Action for batch detaching selected items inside Edit Album modal
@@ -659,6 +682,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 <span>Edit Album & Lead Photo</span>
               </button>
             )}
+            {currentActiveAlbum && (
+              <button
+                onClick={() => requestDeleteAlbum(currentActiveAlbum.albumName)}
+                className="flex items-center space-x-2 bg-rose-950/70 hover:bg-rose-700 text-rose-200 hover:text-white border border-rose-400/50 px-4 py-2.5 rounded-2xl text-xs font-bold cursor-pointer transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Album</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
@@ -823,6 +855,14 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   title="Edit Album Details, Items & Lead Photo"
                 >
                   <FolderEdit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); requestDeleteAlbum(ag.albumName); }}
+                  className="ml-1.5 p-2 rounded-xl bg-[#120B21] hover:bg-rose-700 text-rose-300 hover:text-white border border-rose-400/40 transition-colors cursor-pointer flex-shrink-0"
+                  title="Delete album and all its items"
+                  aria-label={`Delete album `}
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ))}
@@ -1073,6 +1113,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 <span>Restore Sample Memories</span>
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {albumToDelete && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="delete-album-title" className="w-full max-w-md rounded-3xl border border-rose-400/60 bg-[#180E2B] p-6 shadow-2xl space-y-5">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-400/40 text-rose-300 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h3 id="delete-album-title" className="font-cinzel text-xl font-bold text-[#FFF2A8]">Delete “{albumToDelete.name}”?</h3>
+              <p className="text-sm text-[#C8B1E4]">
+                This removes the album and all <strong className="text-rose-200">{albumToDelete.itemIds.length} {albumToDelete.itemIds.length === 1 ? "entry" : "entries"}</strong> from your vault collection. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setAlbumToDelete(null)} className="gold-beveled-btn px-5 py-2.5 text-xs text-[#FFF2A8]">Keep Album</button>
+              <button type="button" onClick={handleDeleteAlbum} className="rounded-xl bg-rose-600 hover:bg-rose-500 px-5 py-2.5 text-xs font-bold text-white">
+                Delete Album & {albumToDelete.itemIds.length} {albumToDelete.itemIds.length === 1 ? "Item" : "Items"}
+              </button>
+            </div>
           </div>
         </div>
       )}
