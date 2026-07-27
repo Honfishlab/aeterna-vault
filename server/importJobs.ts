@@ -4,7 +4,7 @@ import { mediaTypeAllowed, r2Bucket, r2Modules, safeObjectName } from "./r2";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
-const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,error_message AS error,attempts,created_at AS \"createdAt\",updated_at AS \"updatedAt\",delivered_at AS \"deliveredAt\"";
+const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,error_message AS error,attempts,created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",delivered_at AS \"deliveredAt\"";
 let lastCleanupAt = 0;
 let workerBusy = false;
 
@@ -105,11 +105,13 @@ export async function processNextImportJob() {
     const { Readable } = await import("node:stream");
     const upload = new Upload({ client, params: { Bucket: r2Bucket(), Key: objectKey, Body: Readable.fromWeb(download.body as any), ContentType: mimeType }, queueSize: 2, partSize: 8 * 1024 * 1024, leavePartsOnError: false });
     let lastProgress = 0;
+    let lastReportedBytes = 0;
     upload.on("httpUploadProgress", (event: any) => {
       const loaded = Number(event.loaded || 0);
       const progress = total ? Math.min(99, Math.round(loaded / total * 100)) : Math.min(99, lastProgress + 1);
-      if (progress >= lastProgress + 2) {
-        lastProgress = progress;
+      if (progress >= lastProgress + 1 || loaded >= lastReportedBytes + 8 * 1024 * 1024) {
+        lastProgress = Math.max(lastProgress, progress);
+        lastReportedBytes = loaded;
         execute("UPDATE media_import_jobs SET bytes_transferred=$1,progress=$2,updated_at=NOW() WHERE id=$3", [loaded, progress, job.id]).catch(() => undefined);
       }
     });

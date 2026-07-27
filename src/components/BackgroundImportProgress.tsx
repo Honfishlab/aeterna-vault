@@ -14,7 +14,23 @@ interface Job {
   provider?: string;
   error?: string | null;
   deliveredAt?: string | null;
+  createdAt?: string | null;
+  startedAt?: string | null;
 }
+
+const formatBytes = (bytes = 0) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return (bytes / 1024 ** index).toFixed(index > 1 ? 1 : 0) + " " + units[index];
+};
+
+const formatDuration = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "calculating";
+  if (seconds < 60) return Math.max(1, Math.ceil(seconds)) + " sec";
+  if (seconds < 3600) return Math.ceil(seconds / 60) + " min";
+  return Math.floor(seconds / 3600) + " hr " + Math.ceil((seconds % 3600) / 60) + " min";
+};
 
 export function BackgroundImportProgress({ onImported }: { onImported: (items: ImportedCloudMedia[]) => void }) {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -86,11 +102,28 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       </div>
       {jobs.map(job => {
         const expired = job.provider === "google-photos" && job.error?.includes("expired");
+        const transferred = Number(job.bytesTransferred || 0);
+        const total = Number(job.bytesTotal || 0);
+        const percent = job.status === "complete" ? 100 : Math.max(0, Math.min(99, Number(job.progress || 0)));
+        const started = job.startedAt ? new Date(job.startedAt).getTime() : 0;
+        const elapsedSeconds = started ? Math.max(1, (Date.now() - started) / 1000) : 0;
+        const bytesPerSecond = elapsedSeconds && transferred ? transferred / elapsedSeconds : 0;
+        const remainingSeconds = bytesPerSecond && total > transferred ? (total - transferred) / bytesPerSecond : Number.NaN;
+        const active = ["queued", "transferring", "cancel_requested"].includes(job.status);
         return (
-          <div key={job.id} className="border-t border-[#DFB260]/15 pt-2 first:border-0">
-            <div className="flex justify-between gap-3 text-[11px]"><span className="text-[#FFF2A8] truncate">{job.name}</span><span className="text-[#F5D77F] shrink-0">{job.status.replace("_", " ")} - {job.progress || 0}%</span></div>
-            <div className="h-1.5 bg-black/40 rounded-full overflow-hidden mt-1"><div className="h-full bg-gradient-to-r from-[#DFB260] to-[#F5D77F] transition-all" style={{ width: (job.progress || 0) + "%" }} /></div>
-            <div className="flex items-start justify-between gap-2 mt-1">
+          <div key={job.id} className="border-t border-[#DFB260]/15 pt-3 first:border-0">
+            <div className="flex justify-between gap-3 text-xs">
+              <span className="text-[#FFF2A8] font-semibold truncate">{job.name}</span>
+              <span className="text-[#F5D77F] font-mono shrink-0">{percent}%</span>
+            </div>
+            <div className="relative h-3 bg-black/50 rounded-full overflow-hidden mt-2 border border-[#DFB260]/20" role="progressbar" aria-label={"Importing " + job.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={total ? percent : undefined}>
+              <div className={"h-full bg-gradient-to-r from-[#B77A2D] via-[#F5D77F] to-[#FFF2A8] transition-[width] duration-500 " + (active && !total ? "animate-pulse" : "")} style={{ width: (total ? percent : active ? Math.max(8, percent) : percent) + "%" }} />
+            </div>
+            <div className="flex justify-between gap-3 mt-1.5 text-[10px] font-mono text-[#C8B1E4]">
+              <span>{job.status === "queued" ? "Waiting for transfer…" : job.status === "transferring" && !total ? "Preparing secure video stream…" : total ? formatBytes(transferred) + " of " + formatBytes(total) : job.status.replaceAll("_", " ")}</span>
+              {active && bytesPerSecond > 0 && <span className="shrink-0">{formatBytes(bytesPerSecond)}/s · {formatDuration(remainingSeconds)} left</span>}
+            </div>
+            <div className="flex items-start justify-between gap-2 mt-2">
               <div>{job.error && <p className="text-[10px] text-rose-300">{job.error}</p>}{expired && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("aeterna-reselect-google-photos"))} className="text-[10px] text-[#F5D77F] underline underline-offset-2">Select this item again in Google Photos</button>}</div>
               {["queued","transferring","cancel_requested"].includes(job.status) && <button onClick={() => act(job, "cancel")} disabled={Boolean(actionId)} className="text-[10px] text-rose-300 flex items-center gap-1"><Ban className="w-3 h-3" /> Cancel</button>}
               {["failed","cancelled"].includes(job.status) && !expired && <button onClick={() => act(job, "retry")} disabled={Boolean(actionId)} className="text-[10px] text-[#F5D77F] flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Retry</button>}
