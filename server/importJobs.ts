@@ -8,6 +8,22 @@ const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS
 let lastCleanupAt = 0;
 let workerBusy = false;
 
+const googleMediaHost = (hostname: string) => hostname === "googleusercontent.com" || hostname.endsWith(".googleusercontent.com") || hostname === "googlevideo.com" || hostname.endsWith(".googlevideo.com") || hostname === "google.com" || hostname.endsWith(".google.com");
+
+async function fetchGoogleMedia(url: string, token: string) {
+  let current = new URL(url);
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    if (current.protocol !== "https:" || !googleMediaHost(current.hostname)) throw new Error("UNTRUSTED_GOOGLE_MEDIA_REDIRECT");
+    const response = await fetch(current, { headers: { Authorization: "Bearer " + token }, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => undefined);
+    if (!location) throw new Error("GOOGLE_MEDIA_REDIRECT_MISSING_LOCATION");
+    current = new URL(location, current);
+  }
+  throw new Error("GOOGLE_MEDIA_TOO_MANY_REDIRECTS");
+}
+
 export async function queueDriveJobs(userId: string, fileIds: string[]) {
   const auth = await googleAccess(userId);
   const jobs: any[] = [];
@@ -89,10 +105,10 @@ export async function processNextImportJob() {
     }
     if (payload.provider === "google-photos") downloadUrl = payload.baseUrl + (mimeType.startsWith("video/") ? "=dv" : "=d");
     else downloadUrl = DRIVE_API + "/files/" + encodeURIComponent(job.provider_file_id) + "?alt=media";
-    const download = await fetch(downloadUrl, { headers: { Authorization: "Bearer " + auth.token } });
+    const download = payload.provider === "google-photos" ? await fetchGoogleMedia(downloadUrl, auth.token) : await fetch(downloadUrl, { headers: { Authorization: "Bearer " + auth.token } });
     if (!download.ok || !download.body) {
       if (payload.provider === "google-photos" && [401,403,404].includes(download.status)) throw new Error("PHOTOS_SELECTION_EXPIRED");
-      throw new Error("DOWNLOAD_FAILED_HTTP_" + download.status);
+      throw new Error("DOWNLOAD_FAILED_HTTP_" + download.status + "_" + new URL(download.url || downloadUrl).hostname);
     }
     const total = Number(download.headers.get("content-length") || job.bytes_total || 0);
     if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_5_GB");
