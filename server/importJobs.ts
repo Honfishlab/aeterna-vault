@@ -35,7 +35,7 @@ export async function queueDriveJobs(userId: string, fileIds: string[]) {
     const existing = await query<any>("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND provider_connection_id=$2 AND provider_file_id=$3 AND status=$$complete$$", [userId, auth.connectionId, fileId]);
     if (existing[0]) { jobs.push({ ...existing[0], mimeType: file.mimeType, size }); continue; }
     const id = crypto.randomUUID();
-    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,bytes_total) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb,$7) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,bytes_total=EXCLUDED.bytes_total,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [id, userId, auth.connectionId, fileId, String(file.name).slice(0,255), JSON.stringify({ provider: "google-drive", mimeType: file.mimeType }), size]);
+    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,bytes_total) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb,$7) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,attempts=0,bytes_total=EXCLUDED.bytes_total,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [id, userId, auth.connectionId, fileId, String(file.name).slice(0,255), JSON.stringify({ provider: "google-drive", mimeType: file.mimeType }), size]);
     jobs.push({ id, name: file.name, mimeType: file.mimeType, size, status: "queued", progress: 0 });
   }
   return { jobs };
@@ -63,6 +63,7 @@ export async function acknowledgeImportJobs(userId: string, ids: string[]) {
 }
 
 export async function maintainImportQueue() {
+  await execute("UPDATE media_import_jobs SET attempts=0,updated_at=NOW(),error_message=NULL WHERE status=$$queued$$ AND attempts>=3");
   await execute("UPDATE media_import_jobs SET status=CASE WHEN status=$$cancel_requested$$ THEN $$cancelled$$ ELSE $$queued$$ END,started_at=NULL,updated_at=NOW(),error_message=CASE WHEN status=$$transferring$$ THEN $$Recovered after an interrupted worker.$$ ELSE error_message END WHERE status IN ($$transferring$$,$$cancel_requested$$) AND updated_at<NOW()-INTERVAL $$10 minutes$$");
   if (Date.now() - lastCleanupAt < 5 * 60_000) return;
   lastCleanupAt = Date.now();
