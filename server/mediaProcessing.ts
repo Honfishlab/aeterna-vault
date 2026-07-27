@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import ffmpegPath from "ffmpeg-static";
 import { execute, query } from "./db";
 import { r2Bucket, r2Modules } from "./r2";
+
+const ffmpegPath = process.env.FFMPEG_BIN || join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 
 const run = (args: string[]) => new Promise<void>((resolve, reject) => {
   if (!ffmpegPath) return reject(new Error("FFMPEG_NOT_AVAILABLE"));
