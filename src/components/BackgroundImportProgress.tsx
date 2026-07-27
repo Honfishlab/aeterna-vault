@@ -35,6 +35,8 @@ const formatDuration = (seconds: number) => {
 export function BackgroundImportProgress({ onImported }: { onImported: (items: ImportedCloudMedia[]) => void }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [actionId, setActionId] = useState("");
+  const [photoSessions, setPhotoSessions] = useState<string[]>([]);
+  const [photoSessionError, setPhotoSessionError] = useState("");
   const delivering = useRef(new Set<string>());
   const onImportedRef = useRef(onImported);
   onImportedRef.current = onImported;
@@ -73,9 +75,48 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
       setJobs(previous => [...incoming, ...previous.filter(job => !incoming.some(item => item.id === job.id))]);
       void deliverCompleted(incoming);
     };
+    const receivePhotoSession = (event: Event) => {
+      const id = String((event as CustomEvent<{ id?: string }>).detail?.id || "");
+      if (id) setPhotoSessions(previous => previous.includes(id) ? previous : [...previous, id]);
+    };
     window.addEventListener("aeterna-import-jobs", receive);
-    return () => window.removeEventListener("aeterna-import-jobs", receive);
+    window.addEventListener("aeterna-google-photos-session", receivePhotoSession);
+    return () => {
+      window.removeEventListener("aeterna-import-jobs", receive);
+      window.removeEventListener("aeterna-google-photos-session", receivePhotoSession);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!photoSessions.length) return;
+    let checking = false;
+    const checkSessions = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        for (const id of photoSessions) {
+          const statusResponse = await fetch("/api/integrations/google-photos/session/" + encodeURIComponent(id));
+          const status = await statusResponse.json();
+          if (!statusResponse.ok) {
+            setPhotoSessionError(status.error || "Google Photos selection could not be checked.");
+            setPhotoSessions(previous => previous.filter(value => value !== id));
+            continue;
+          }
+          if (!status.ready) continue;
+          const queueResponse = await fetch("/api/integrations/google-photos/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id }) });
+          const queued = await queueResponse.json();
+          if (queueResponse.ok) {
+            window.dispatchEvent(new CustomEvent("aeterna-import-jobs", { detail: queued.jobs || [] }));
+            setPhotoSessionError(queued.jobs?.length ? "" : "Google returned no supported photos or videos.");
+          } else setPhotoSessionError(queued.error || "Selected Photos could not be queued.");
+          setPhotoSessions(previous => previous.filter(value => value !== id));
+        }
+      } finally { checking = false; }
+    };
+    void checkSessions();
+    const timer = window.setInterval(checkSessions, 3000);
+    return () => window.clearInterval(timer);
+  }, [photoSessions]);
 
   useEffect(() => {
     if (!jobs.some(job => ["queued", "transferring", "cancel_requested"].includes(job.status))) return;
@@ -93,13 +134,15 @@ export function BackgroundImportProgress({ onImported }: { onImported: (items: I
     setActionId("");
   };
 
-  if (!jobs.length) return null;
+  if (!jobs.length && !photoSessions.length && !photoSessionError) return null;
   return (
     <div className="mt-4 p-4 rounded-2xl bg-[#120B21] border border-[#DFB260]/30 space-y-3">
       <div className="text-sm font-cinzel text-[#FFF2A8] flex items-center justify-between gap-2">
         <span className="flex items-center gap-2"><Loader2 className={"w-4 h-4 " + (jobs.some(job => ["queued","transferring"].includes(job.status)) ? "animate-spin" : "")} /> Import activity</span>
         <button onClick={refresh} className="text-[#F5D77F]"><RefreshCw className="w-4 h-4" /></button>
       </div>
+      {photoSessions.length > 0 && <div className="text-xs text-[#C8B1E4] flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for your Google Photos selection…</div>}
+      {photoSessionError && <p className="text-xs text-rose-300">{photoSessionError}</p>}
       {jobs.map(job => {
         const expired = job.provider === "google-photos" && job.error?.includes("expired");
         const transferred = Number(job.bytesTransferred || 0);

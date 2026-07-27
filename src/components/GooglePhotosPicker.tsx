@@ -72,7 +72,9 @@ export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
       setPhase("idle");
       return;
     }
-    timerRef.current = window.setInterval(() => checkSelection(session.id), 5000);
+    window.dispatchEvent(new CustomEvent("aeterna-google-photos-session", { detail: { id: session.id } }));
+    onQueued?.();
+    setPhase("queued");
   };
 
   useEffect(() => {
