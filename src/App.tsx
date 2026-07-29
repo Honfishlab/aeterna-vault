@@ -15,6 +15,8 @@ import { InheritanceView } from './components/InheritanceView';
 import { ImmortalGatewayView } from './components/ImmortalGatewayView';
 import { AuditView } from './components/AuditView';
 import { ImportHistoryView } from './components/ImportHistoryView';
+import { RecycleBinView } from './components/RecycleBinView';
+import { StorageManagementView } from './components/StorageManagementView';
 import { UploadModal } from './components/UploadModal';
 import { VideoRecorderModal } from './components/VideoRecorderModal';
 import { WalletModal } from './components/WalletModal';
@@ -579,7 +581,11 @@ export default function App() {
           />
         )}
 
-        {currentView === 'imports' && <ImportHistoryView />}
+        {currentView === 'imports' && <ImportHistoryView onOpenAlbum={(album) => { setSearchQuery(album); setCurrentView('search'); }} />}
+
+        {currentView === 'recycle' && <RecycleBinView onRestore={(items) => handleUpdateMemoriesList([...memories, ...items.filter(item => !memories.some(existing => existing.id === item.id))])} />}
+
+        {currentView === 'storage' && <StorageManagementView onOpenRecycle={() => setCurrentView('recycle')} />}
 
         {currentView === 'audit' && (
           <AuditView

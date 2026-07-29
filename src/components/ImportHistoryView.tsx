@@ -15,11 +15,12 @@ interface HistoryJob {
   attempts?: number;
   createdAt?: string;
   completedAt?: string | null;
+  albumName?: string | null;
 }
 
 const bytes = (value = 0) => value >= 1024 ** 3 ? (value / 1024 ** 3).toFixed(1) + " GB" : value >= 1024 ** 2 ? (value / 1024 ** 2).toFixed(1) + " MB" : (value / 1024).toFixed(0) + " KB";
 
-export function ImportHistoryView() {
+export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: string) => void }) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -44,6 +45,17 @@ export function ImportHistoryView() {
     failed: jobs.filter(job => job.status === "failed").length,
     processing: jobs.filter(job => ["queued", "processing"].includes(job.processingStatus || "")).length,
   }), [jobs]);
+  const sessions = useMemo(() => (Object.values(jobs.reduce<Record<string, { albumName: string; jobs: HistoryJob[] }>>((groups, job) => {
+    const albumName = job.albumName || "Unassigned import";
+    (groups[albumName] ||= { albumName, jobs: [] }).jobs.push(job);
+    return groups;
+  }, {})) as { albumName: string; jobs: HistoryJob[] }[]).map(session => {
+    const active = session.jobs.filter(job => ["queued", "transferring"].includes(job.status)).length;
+    const processing = session.jobs.filter(job => ["queued", "processing"].includes(job.processingStatus || "")).length;
+    const failed = session.jobs.filter(job => job.status === "failed" || job.processingStatus === "failed").length;
+    const complete = session.jobs.filter(job => job.status === "complete" && !["queued", "processing"].includes(job.processingStatus || "")).length;
+    return { ...session, active, processing, failed, complete, status: active ? "Importing" : processing ? "Optimizing video" : failed ? "Complete with issues" : "Complete" };
+  }), [jobs]);
 
   return (
     <section className="space-y-6 pb-16">
@@ -61,6 +73,15 @@ export function ImportHistoryView() {
           <div className="bg-[#120B21]/80 rounded-2xl p-4 border border-[#DFB260]/20"><strong className="text-2xl text-[#FFF2A8]">{counts.processing}</strong><span className="block text-[10px] text-[#C8B1E4] uppercase">Processing</span></div>
           <div className="bg-[#120B21]/80 rounded-2xl p-4 border border-[#DFB260]/20"><strong className="text-2xl text-[#FFF2A8]">{counts.failed}</strong><span className="block text-[10px] text-[#C8B1E4] uppercase">Needs attention</span></div>
         </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {sessions.map(session => <article key={session.albumName} className="cosmic-card rounded-2xl p-5">
+          <div className="flex justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest text-[#F5D77F]">Import session</p><h2 className="font-cinzel text-lg text-[#FFF2A8] font-bold mt-1">{session.albumName}</h2></div><span className={`h-fit px-2.5 py-1 rounded-full text-[10px] ${session.failed ? "bg-rose-500/20 text-rose-200" : session.active || session.processing ? "bg-amber-400/20 text-[#FFF2A8]" : "bg-emerald-500/20 text-emerald-200"}`}>{session.status}</span></div>
+          <div className="h-2 rounded-full bg-black/40 overflow-hidden mt-4"><div className="h-full bg-gradient-to-r from-[#B77A2D] to-[#FFF2A8]" style={{ width: `${Math.round(session.complete / Math.max(1,session.jobs.length) * 100)}%` }} /></div>
+          <p className="text-xs text-[#C8B1E4] mt-2">{session.complete} of {session.jobs.length} ready{session.failed ? ` · ${session.failed} need attention` : ""}</p>
+          {onOpenAlbum && session.albumName !== "Unassigned import" && <button onClick={() => onOpenAlbum(session.albumName)} className="text-xs text-[#F5D77F] mt-4">Open album →</button>}
+        </article>)}
       </div>
 
       <div className="flex gap-2 overflow-x-auto">

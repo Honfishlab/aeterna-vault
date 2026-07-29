@@ -10,6 +10,8 @@ export type ViewMode =
   | 'inheritance'
   | 'immortal'
   | 'imports'
+  | 'recycle'
+  | 'storage'
   | 'audit';
 
 export interface Heir {

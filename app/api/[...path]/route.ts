@@ -125,6 +125,23 @@ export async function GET(request: Request) {
     return json({ jobs: await jobStatus(user.id, ids, history) });
   }
 
+  if (route === "media/recycle-bin") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const albums = await query("SELECT id,album_name AS \"albumName\",jsonb_array_length(item_snapshot) AS \"itemCount\",COALESCE(array_length(media_ids,1),0) AS \"mediaCount\",deleted_at AS \"deletedAt\",purge_after AS \"purgeAfter\" FROM deleted_albums WHERE user_id=$1 AND restored_at IS NULL AND permanently_deleted_at IS NULL AND purge_after>NOW() ORDER BY deleted_at DESC", [user.id]);
+    return json({ albums });
+  }
+
+  if (route === "media/storage-summary") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const totals = await query<any>("SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL)::integer AS \"activeCount\",COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::integer AS \"trashCount\",COALESCE(SUM(size_bytes) FILTER (WHERE deleted_at IS NULL),0)::bigint AS \"activeBytes\",COALESCE(SUM(size_bytes) FILTER (WHERE deleted_at IS NOT NULL),0)::bigint AS \"trashBytes\",COUNT(*) FILTER (WHERE content_type LIKE $$video/%$$ AND deleted_at IS NULL)::integer AS \"videoCount\",COUNT(*) FILTER (WHERE content_type LIKE $$image/%$$ AND deleted_at IS NULL)::integer AS \"imageCount\" FROM media_objects WHERE user_id=$1", [user.id]);
+    const albums = await query("SELECT COALESCE(j.album_name,$$Unassigned$$) AS \"albumName\",COUNT(*)::integer AS count,COALESCE(SUM(m.size_bytes),0)::bigint AS bytes FROM media_objects m LEFT JOIN LATERAL (SELECT album_name FROM media_import_jobs WHERE media_object_id=m.id AND album_name IS NOT NULL ORDER BY created_at DESC LIMIT 1) j ON TRUE WHERE m.user_id=$1 AND m.deleted_at IS NULL GROUP BY COALESCE(j.album_name,$$Unassigned$$) ORDER BY bytes DESC LIMIT 25", [user.id]);
+    const total = totals[0] || {};
+    const billableBytes = Number(total.activeBytes || 0) + Number(total.trashBytes || 0);
+    return json({ totals: total, albums, estimatedMonthlyStorageUsd: Number((billableBytes / 1024 ** 3 * Number(process.env.R2_STORAGE_COST_PER_GB || 0.015)).toFixed(2)), estimateOnly: true });
+  }
+
   if (route.startsWith("integrations/google-photos/session/")) {
     try {
       const user = await authenticatedUser(request);
@@ -265,7 +282,7 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
 
   if (route === "import-jobs/acknowledge") {
     const user = await authenticatedUser(request);
@@ -346,6 +363,35 @@ export async function POST(request: Request) {
     const trashed = await query("UPDATE media_objects SET deleted_at=NOW(),purge_after=NOW()+INTERVAL $$30 days$$ WHERE user_id=$1 AND id=ANY($2::text[]) AND deleted_at IS NULL RETURNING id", [user.id, ids]);
     await execute("UPDATE media_import_jobs SET status=$$cancelled$$,updated_at=NOW() WHERE user_id=$1 AND media_object_id=ANY($2::text[]) AND status IN ($$queued$$,$$transferring$$,$$cancel_requested$$)", [user.id, ids]);
     return json({ success: true, count: trashed.length, purgeAfterDays: 30 });
+  }
+
+  if (route === "media/trash-album") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const albumName = String(body.albumName || "").trim().slice(0, 255);
+    const mediaIds = Array.isArray(body.mediaIds) ? body.mediaIds.map(String).slice(0, 500) : [];
+    const items = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+    if (!albumName || !items.length) return json({ error: "Album name and items are required." }, 400);
+    const id = crypto.randomUUID();
+    await execute("INSERT INTO deleted_albums(id,user_id,album_name,item_snapshot,media_ids) VALUES($1,$2,$3,$4::jsonb,$5::text[])", [id, user.id, albumName, JSON.stringify(items), mediaIds]);
+    if (mediaIds.length) await execute("UPDATE media_objects SET deleted_at=NOW(),purge_after=NOW()+INTERVAL $$30 days$$ WHERE user_id=$1 AND id=ANY($2::text[]) AND deleted_at IS NULL", [user.id, mediaIds]);
+    return json({ success: true, id, purgeAfterDays: 30 });
+  }
+
+  if (route === "media/restore-album" || route === "media/purge-album") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const id = String(body.id || "");
+    const rows = await query<any>("SELECT item_snapshot AS items,media_ids AS \"mediaIds\" FROM deleted_albums WHERE id=$1 AND user_id=$2 AND restored_at IS NULL AND permanently_deleted_at IS NULL AND purge_after>NOW()", [id, user.id]);
+    if (!rows[0]) return json({ error: "Recycle-bin album not found or expired." }, 404);
+    if (route === "media/restore-album") {
+      if (rows[0].mediaIds?.length) await execute("UPDATE media_objects SET deleted_at=NULL,purge_after=NULL WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, rows[0].mediaIds]);
+      await execute("UPDATE deleted_albums SET restored_at=NOW() WHERE id=$1 AND user_id=$2", [id, user.id]);
+      return json({ success: true, items: rows[0].items || [] });
+    }
+    if (rows[0].mediaIds?.length) await execute("UPDATE media_objects SET purge_after=NOW() WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, rows[0].mediaIds]);
+    await execute("UPDATE deleted_albums SET permanently_deleted_at=NOW() WHERE id=$1 AND user_id=$2", [id, user.id]);
+    return json({ success: true });
   }
 
   if (route === "media/presign") {

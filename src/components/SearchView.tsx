@@ -243,11 +243,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const handleDeleteAlbum = async () => {
     if (!albumToDelete) return;
     const deletedIds = new Set(albumToDelete.itemIds);
-    const mediaIds = memories.filter(memory => deletedIds.has(memory.id) && memory.mediaId).map(memory => memory.mediaId as string);
-    if (mediaIds.length) {
-      const response = await fetch("/api/media/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaIds }) });
-      if (!response.ok) { window.alert("The album could not be moved to the 30-day recycle bin. Please try again."); return; }
-    }
+    const deletedItems = memories.filter(memory => deletedIds.has(memory.id));
+    const mediaIds = deletedItems.filter(memory => memory.mediaId).map(memory => memory.mediaId as string);
+    const response = await fetch("/api/media/trash-album", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ albumName: albumToDelete.name, mediaIds, items: deletedItems }) });
+    if (!response.ok) { window.alert("The album could not be moved to the 30-day recycle bin. Please try again."); return; }
     if (onUpdateMemories) {
       onUpdateMemories(memories.filter(memory => !deletedIds.has(memory.id)));
     } else if (onDeleteMemory) {
@@ -841,6 +840,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <h4 className="text-xs font-bold font-cinzel text-[#FFF2A8] group-hover:text-[#F5D77F] truncate">
                       {ag.albumName}
                     </h4>
+                    {(() => {
+                      const pending = ag.items.filter(item => item.mediaId && ["queued","processing"].includes(mediaProcessing[item.mediaId] || item.processingStatus || "")).length;
+                      const failed = ag.items.filter(item => item.mediaId && (mediaProcessing[item.mediaId] || item.processingStatus) === "failed").length;
+                      return <span className={`inline-flex mt-1 rounded-full px-2 py-0.5 text-[8px] uppercase tracking-wide ${failed ? "bg-rose-500/20 text-rose-200" : pending ? "bg-amber-400/20 text-amber-100" : "bg-emerald-500/20 text-emerald-200"}`}>{failed ? "Complete with issues" : pending ? `Optimizing ${pending}` : "Complete"}</span>;
+                    })()}
                     <p className="text-[10px] text-[#C8B1E4]/70 font-mono mt-0.5">
                       {ag.count} {ag.count === 1 ? 'Item' : 'Items'} • Shared Timestamp
                     </p>
