@@ -5,7 +5,7 @@ import { processNextMediaJob, queueMediaProcessing } from "./mediaProcessing";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
-const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,(provider_payload->>$$width$$)::integer AS width,(provider_payload->>$$height$$)::integer AS height,(provider_payload->>$$durationMillis$$)::bigint AS \"durationMs\",provider_payload->>$$createTime$$ AS \"createdTime\",EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.thumbnail_object_key IS NOT NULL) AS \"hasThumbnail\",(SELECT mo.processing_status FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingStatus\",(SELECT mo.processing_error FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingError\",error_message AS error,attempts,resume_offset AS \"resumeOffset\",created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",completed_at AS \"completedAt\",delivered_at AS \"deliveredAt\"";
+const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",album_name AS \"albumName\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,(provider_payload->>$$width$$)::integer AS width,(provider_payload->>$$height$$)::integer AS height,(provider_payload->>$$durationMillis$$)::bigint AS \"durationMs\",provider_payload->>$$createTime$$ AS \"createdTime\",EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.thumbnail_object_key IS NOT NULL) AS \"hasThumbnail\",(SELECT mo.processing_status FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingStatus\",(SELECT mo.processing_error FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingError\",error_message AS error,attempts,resume_offset AS \"resumeOffset\",created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",completed_at AS \"completedAt\",delivered_at AS \"deliveredAt\"";
 let lastCleanupAt = 0;
 let workerBusy = false;
 
@@ -92,7 +92,7 @@ async function uploadWithCheckpoints(download: Response, job: any, objectKey: st
   return { ETag: completed.ETag || null, bytes: offset };
 }
 
-export async function queueDriveJobs(userId: string, fileIds: string[]) {
+export async function queueDriveJobs(userId: string, fileIds: string[], albumName?: string) {
   const auth = await googleAccess(userId);
   const jobs: any[] = [];
   for (const fileId of Array.from(new Set(fileIds.map(String))).slice(0, 25)) {
@@ -103,7 +103,7 @@ export async function queueDriveJobs(userId: string, fileIds: string[]) {
     const existing = await query<any>("SELECT " + JOB_FIELDS + " FROM media_import_jobs WHERE user_id=$1 AND provider_connection_id=$2 AND provider_file_id=$3 AND status=$$complete$$", [userId, auth.connectionId, fileId]);
     if (existing[0]) { jobs.push({ ...existing[0], mimeType: file.mimeType, size }); continue; }
     const id = crypto.randomUUID();
-    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,bytes_total) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb,$7) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,attempts=0,bytes_total=EXCLUDED.bytes_total,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [id, userId, auth.connectionId, fileId, String(file.name).slice(0,255), JSON.stringify({ provider: "google-drive", mimeType: file.mimeType, sourceId: file.id, createTime: file.createdTime || null, width: Number(file.imageMediaMetadata?.width || file.videoMediaMetadata?.width || 0) || null, height: Number(file.imageMediaMetadata?.height || file.videoMediaMetadata?.height || 0) || null, durationMillis: Number(file.videoMediaMetadata?.durationMillis || 0) || null }), size]);
+    await execute("INSERT INTO media_import_jobs (id,user_id,provider_connection_id,provider_file_id,provider_file_name,status,provider_payload,bytes_total,album_name) VALUES ($1,$2,$3,$4,$5,$$queued$$,$6::jsonb,$7,$8) ON CONFLICT (user_id,provider_connection_id,provider_file_id) DO UPDATE SET id=EXCLUDED.id,status=$$queued$$,provider_payload=EXCLUDED.provider_payload,album_name=EXCLUDED.album_name,attempts=0,bytes_total=EXCLUDED.bytes_total,bytes_transferred=0,progress=0,error_message=NULL,media_object_id=NULL,started_at=NULL,completed_at=NULL,delivered_at=NULL,updated_at=NOW()", [id, userId, auth.connectionId, fileId, String(file.name).slice(0,255), JSON.stringify({ provider: "google-drive", mimeType: file.mimeType, sourceId: file.id, createTime: file.createdTime || null, width: Number(file.imageMediaMetadata?.width || file.videoMediaMetadata?.width || 0) || null, height: Number(file.imageMediaMetadata?.height || file.videoMediaMetadata?.height || 0) || null, durationMillis: Number(file.videoMediaMetadata?.durationMillis || 0) || null }), size, albumName?.trim().slice(0, 200) || null]);
     jobs.push({ id, name: file.name, mimeType: file.mimeType, size, status: "queued", progress: 0 });
   }
   return { jobs };
@@ -132,7 +132,6 @@ export async function acknowledgeImportJobs(userId: string, ids: string[]) {
 }
 
 export async function maintainImportQueue() {
-  await execute("UPDATE media_import_jobs SET attempts=0,updated_at=NOW(),error_message=NULL WHERE status=$$queued$$ AND attempts>=3");
   await execute("UPDATE media_import_jobs SET status=$$queued$$,attempts=0,progress=0,bytes_transferred=0,error_message=NULL,started_at=NULL,completed_at=NULL,updated_at=NOW() WHERE status=$$failed$$ AND error_message LIKE $$%media_objects_user_source_idx%$$");
   await execute("UPDATE media_import_jobs SET status=CASE WHEN status=$$cancel_requested$$ THEN $$cancelled$$ ELSE $$queued$$ END,started_at=NULL,updated_at=NOW(),error_message=CASE WHEN status=$$transferring$$ THEN $$Recovered after an interrupted worker.$$ ELSE error_message END WHERE status IN ($$transferring$$,$$cancel_requested$$) AND updated_at<NOW()-INTERVAL $$10 minutes$$");
   if (Date.now() - lastCleanupAt < 5 * 60_000) return;
@@ -142,6 +141,12 @@ export async function maintainImportQueue() {
   for (const object of pending) {
     await client.send(new DeleteObjectCommand({ Bucket: r2Bucket(), Key: object.object_key })).catch(() => undefined);
     await execute("DELETE FROM media_objects WHERE id=$1 AND status=$$pending$$", [object.id]);
+  }
+  const expiredTrash = await query<any>("SELECT id,object_key,playback_object_key,thumbnail_object_key,playback_variants,thumbnail_variants FROM media_objects WHERE deleted_at IS NOT NULL AND purge_after<=NOW() LIMIT 100");
+  for (const object of expiredTrash) {
+    const keys = new Set([object.object_key, object.playback_object_key, object.thumbnail_object_key, ...Object.values(object.playback_variants || {}), ...Object.values(object.thumbnail_variants || {})].filter(Boolean).map(String));
+    for (const key of keys) await client.send(new DeleteObjectCommand({ Bucket: r2Bucket(), Key: key })).catch(() => undefined);
+    await execute("DELETE FROM media_objects WHERE id=$1 AND purge_after<=NOW()", [object.id]);
   }
   const multipart = await client.send(new ListMultipartUploadsCommand({ Bucket: r2Bucket() }));
   const cutoff = Date.now() - 24 * 60 * 60_000;
@@ -164,7 +169,7 @@ export function startImportWorker() {
 
 export async function processNextImportJob() {
   await maintainImportQueue();
-  const rows = await query<any>("UPDATE media_import_jobs SET status=$$transferring$$,started_at=NOW(),attempts=attempts+1,progress=GREATEST(progress,1),updated_at=NOW() WHERE id=(SELECT id FROM media_import_jobs WHERE status=$$queued$$ AND attempts<3 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *");
+  const rows = await query<any>("UPDATE media_import_jobs SET status=$$transferring$$,started_at=NOW(),attempts=attempts+1,progress=GREATEST(progress,1),updated_at=NOW() WHERE id=(SELECT id FROM media_import_jobs WHERE status=$$queued$$ AND attempts<3 AND next_attempt_at<=NOW() ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *");
   const job = rows[0];
   if (!job) return null;
   try {
@@ -225,7 +230,7 @@ export async function processNextImportJob() {
     const retry = !cancelled && !expired && !videoNotReady && Number(job.attempts || 0) < 3;
     const status = cancelled ? "cancelled" : retry ? "queued" : "failed";
     const message = expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
-    await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,updated_at=NOW() WHERE id=$3", [status, message, job.id]);
+    await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,next_attempt_at=NOW()+($3*INTERVAL $$1 second$$),updated_at=NOW() WHERE id=$4", [status, message, Math.min(300, 15 * 2 ** Number(job.attempts || 0)), job.id]);
     return { id: job.id, status };
   }
 }

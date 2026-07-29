@@ -334,7 +334,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const handleCloudImported = (items: ImportedCloudMedia[]) => {
     if (!items.length) return;
     setUploadMode('album');
-    if (!title) setTitle(items.length === 1 ? (items[0].name.split(".").slice(0, -1).join(".") || items[0].name) : "Imported Google Drive Album");
+    if (!title) setTitle(items[0].albumName || (items.length === 1 ? (items[0].name.split(".").slice(0, -1).join(".") || items[0].name) : "Imported Google Drive Album"));
     setAlbumFiles(previous => [...previous, ...items.map(item => ({
       id: "google-" + item.id,
       previewUrl: item.thumbnailUrl || item.mediaUrl,
@@ -1544,6 +1544,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         isOpen={cloudImportOpen}
         onClose={() => setCloudImportOpen(false)}
         onImported={handleCloudImported}
+        albumName={title || "Imported Google Photos Album"}
         onGooglePhotosQueued={() => {
           setUploadMode("album");
           if (!title) setTitle("Imported Google Photos Album");

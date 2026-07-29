@@ -188,7 +188,7 @@ export async function GET(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const mediaId = route.split("/")[1];
-      const rows = await query<{ thumbnail_object_key: string; thumbnail_variants: Record<string, string> }>("SELECT thumbnail_object_key,thumbnail_variants FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND thumbnail_object_key IS NOT NULL LIMIT 1", [mediaId, user.id, "ready"]);
+      const rows = await query<{ thumbnail_object_key: string; thumbnail_variants: Record<string, string> }>("SELECT thumbnail_object_key,thumbnail_variants FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND deleted_at IS NULL AND thumbnail_object_key IS NOT NULL LIMIT 1", [mediaId, user.id, "ready"]);
       if (!rows[0]) return json({ error: "Video thumbnail not found." }, 404);
       const { client, GetObjectCommand } = await r2Modules();
       const requestedSize = new URL(request.url).searchParams.get("size") || "large";
@@ -205,7 +205,8 @@ export async function GET(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const mediaId = route.split("/")[1];
-      const rows = await query<{ object_key: string; content_type: string; original_name: string }>("SELECT COALESCE(playback_object_key,object_key) AS object_key,CASE WHEN playback_object_key IS NOT NULL THEN $$video/mp4$$ ELSE content_type END AS content_type,original_name FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 LIMIT 1", [mediaId, user.id, "ready"]);
+      const quality = new URL(request.url).searchParams.get("quality") === "mobile" ? "mobile" : "standard";
+      const rows = await query<{ object_key: string; content_type: string; original_name: string }>("SELECT COALESCE(CASE WHEN $4=$$mobile$$ THEN playback_variants->>$$mobile$$ END,playback_object_key,object_key) AS object_key,CASE WHEN playback_object_key IS NOT NULL THEN $$video/mp4$$ ELSE content_type END AS content_type,original_name FROM media_objects WHERE id=$1 AND user_id=$2 AND status=$3 AND deleted_at IS NULL LIMIT 1", [mediaId, user.id, "ready", quality]);
       if (!rows[0]) return json({ error: "Media object not found." }, 404);
       const { client, GetObjectCommand } = await r2Modules();
       const object = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: rows[0].object_key, Range: request.headers.get("range") || undefined }));
@@ -264,7 +265,7 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
 
   if (route === "import-jobs/acknowledge") {
     const user = await authenticatedUser(request);
@@ -291,8 +292,8 @@ export async function POST(request: Request) {
     try {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
-      if (route === "import-jobs/queue-drive") return json(await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : []));
-      if (route === "integrations/google-photos/session") return json(await createPhotosSession(user.id));
+      if (route === "import-jobs/queue-drive") return json(await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : [], String(body.albumName || "")));
+      if (route === "integrations/google-photos/session") return json(await createPhotosSession(user.id, String(body.albumName || "")));
       return json(await queuePhotosItems(user.id, String(body.sessionId || "")));
     } catch (error: any) { return json({ error: "The provider request could not be completed.", code: error?.message || "PROVIDER_ERROR" }, 502); }
   }
@@ -302,7 +303,7 @@ export async function POST(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       if (!r2Configured()) return json({ error: "Cloudflare R2 is not configured.", code: "R2_NOT_CONFIGURED" }, 503);
-      const result = await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : []);
+      const result = await queueDriveJobs(user.id, Array.isArray(body.fileIds) ? body.fileIds : [], String(body.albumName || ""));
       return json(result);
     } catch (error: any) {
       console.error("Google Drive import failed", error);
@@ -320,6 +321,31 @@ export async function POST(request: Request) {
       console.error("Google Drive disconnect failed", error);
       return json({ error: "Google Drive could not be disconnected." }, 502);
     }
+  }
+
+  if (route === "media/thumbnail/select") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const mediaId = String(body.mediaId || "");
+    const second = Math.max(0, Math.min(36000, Number(body.second || 0)));
+    const updated = await query("UPDATE media_objects SET preferred_poster_second=$1,processing_status=$$queued$$,processing_error=NULL WHERE id=$2 AND user_id=$3 AND content_type LIKE $$video/%$$ AND deleted_at IS NULL RETURNING id", [second, mediaId, user.id]);
+    if (!updated.length) return json({ error: "Video not found." }, 404);
+    await execute("UPDATE media_processing_jobs SET status=$$queued$$,attempts=0,next_attempt_at=NOW(),error_message=NULL,updated_at=NOW() WHERE media_object_id=$1 AND user_id=$2", [mediaId, user.id]);
+    return json({ success: true, second });
+  }
+
+  if (route === "media/trash" || route === "media/restore") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const ids = Array.isArray(body.mediaIds) ? body.mediaIds.map(String).slice(0, 500) : [];
+    if (!ids.length) return json({ success: true, count: 0 });
+    if (route === "media/restore") {
+      const restored = await query("UPDATE media_objects SET deleted_at=NULL,purge_after=NULL WHERE user_id=$1 AND id=ANY($2::text[]) AND purge_after>NOW() RETURNING id", [user.id, ids]);
+      return json({ success: true, count: restored.length });
+    }
+    const trashed = await query("UPDATE media_objects SET deleted_at=NOW(),purge_after=NOW()+INTERVAL $$30 days$$ WHERE user_id=$1 AND id=ANY($2::text[]) AND deleted_at IS NULL RETURNING id", [user.id, ids]);
+    await execute("UPDATE media_import_jobs SET status=$$cancelled$$,updated_at=NOW() WHERE user_id=$1 AND media_object_id=ANY($2::text[]) AND status IN ($$queued$$,$$transferring$$,$$cancel_requested$$)", [user.id, ids]);
+    return json({ success: true, count: trashed.length, purgeAfterDays: 30 });
   }
 
   if (route === "media/presign") {

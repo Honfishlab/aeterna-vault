@@ -16,6 +16,7 @@ export interface ImportedCloudMedia {
   durationMs?: number | null;
   sourceProvider?: string;
   processingStatus?: string | null;
+  albumName?: string | null;
 }
 
 interface ProviderStatus {
@@ -37,11 +38,12 @@ interface DriveFile {
   thumbnailUrl: string;
 }
 
-export function CloudImportModal({ isOpen, onClose, onImported, onGooglePhotosQueued }: {
+export function CloudImportModal({ isOpen, onClose, onImported, onGooglePhotosQueued, albumName }: {
   isOpen: boolean;
   onClose: () => void;
   onImported: (items: ImportedCloudMedia[]) => void;
   onGooglePhotosQueued?: () => void;
+  albumName?: string;
 }) {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [files, setFiles] = useState<DriveFile[]>([]);
@@ -118,7 +120,7 @@ export function CloudImportModal({ isOpen, onClose, onImported, onGooglePhotosQu
       const response = await fetch("/api/integrations/google/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileIds: selected }),
+        body: JSON.stringify({ fileIds: selected, albumName }),
       });
       const body = await response.json();
       if (!response.ok && !body.imported?.length && !body.jobs?.length) throw new Error(body.error || "Import failed.");
@@ -170,7 +172,7 @@ export function CloudImportModal({ isOpen, onClose, onImported, onGooglePhotosQu
               <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
                 <div className="text-xs text-[#C8B1E4]">Connected as <strong className="text-[#FFF2A8]">{status.accountEmail || status.displayName}</strong></div>
                 <div className="flex gap-2">
-                  <GooglePhotosPicker onQueued={onGooglePhotosQueued} />
+                  <GooglePhotosPicker onQueued={onGooglePhotosQueued} albumName={albumName} />
                   <button onClick={() => loadFiles(null, true)} className="gold-beveled-btn px-3 py-2 text-xs flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
                   <button onClick={disconnect} className="px-3 py-2 text-xs text-rose-300 border border-rose-500/40 rounded-xl flex items-center gap-1"><LogOut className="w-3.5 h-3.5" /> Disconnect</button>
                 </div>

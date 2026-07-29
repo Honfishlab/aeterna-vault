@@ -3,7 +3,7 @@ import { CheckCircle2, Images, Loader2, RefreshCw } from "lucide-react";
 
 type Phase = "idle" | "selecting" | "queueing" | "queued";
 
-export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
+export function GooglePhotosPicker({ onQueued, albumName }: { onQueued?: () => void; albumName?: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState("");
@@ -61,7 +61,7 @@ export function GooglePhotosPicker({ onQueued }: { onQueued?: () => void }) {
     const response = await fetch("/api/integrations/google-photos/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ albumName }),
     });
     const session = await response.json();
     if (!response.ok) {

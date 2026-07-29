@@ -7,6 +7,7 @@ import {
 
 export interface ImageViewerData {
   id?: string;
+  mediaId?: string;
   imageUrl?: string;
   videoUrl?: string;
   mediaType?: 'photo' | 'video' | 'document';
@@ -72,7 +73,9 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [thumbnailSaving, setThumbnailSaving] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0, originX: 0, originY: 0 });
 
   const resetView = () => {
@@ -132,6 +135,17 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const txId = image.permawebTxId || 'ar_9xK2mP1a8f331';
   const arweaveUrl = `https://arweave.net/${txId}`;
   const encryption = image.encryptionLevel || 'AES-GCM-256 Vault';
+
+  const selectCurrentVideoFrame = async () => {
+    if (!image.mediaId || !videoRef.current) return;
+    setThumbnailSaving(true);
+    try {
+      const response = await fetch("/api/media/thumbnail/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: image.mediaId, second: videoRef.current.currentTime }) });
+      if (!response.ok) throw new Error("THUMBNAIL_SELECTION_FAILED");
+      window.alert("Thumbnail frame selected. The updated poster will appear after background processing.");
+    } catch { window.alert("The thumbnail frame could not be selected. Please try again."); }
+    finally { setThumbnailSaving(false); }
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(arweaveUrl);
@@ -204,6 +218,12 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             {copiedLink ? <Check className="w-5 h-5 text-emerald-400" /> : <Share2 className="w-5 h-5" />}
           </button>
 
+          {isVideo && image.mediaId && (
+            <button onClick={selectCurrentVideoFrame} disabled={thumbnailSaving} className="p-2 rounded-full hover:bg-white/10 text-[#F5D77F] disabled:opacity-50" title="Use the current video frame as thumbnail">
+              {thumbnailSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+            </button>
+          )}
+
           <button
             onClick={() => setShowInfo(prev => !prev)}
             className={`p-2 rounded-full transition-colors cursor-pointer ${
@@ -260,6 +280,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         >
           {isVideo && mediaUrl ? (
             <video
+              ref={videoRef}
               key={mediaUrl}
               src={mediaUrl}
               poster={image.thumbnailUrl || image.imageUrl}

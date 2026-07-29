@@ -240,9 +240,14 @@ export const SearchView: React.FC<SearchViewProps> = ({
     if (itemIds.length) setAlbumToDelete({ name: albumName, itemIds });
   };
 
-  const handleDeleteAlbum = () => {
+  const handleDeleteAlbum = async () => {
     if (!albumToDelete) return;
     const deletedIds = new Set(albumToDelete.itemIds);
+    const mediaIds = memories.filter(memory => deletedIds.has(memory.id) && memory.mediaId).map(memory => memory.mediaId as string);
+    if (mediaIds.length) {
+      const response = await fetch("/api/media/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaIds }) });
+      if (!response.ok) { window.alert("The album could not be moved to the 30-day recycle bin. Please try again."); return; }
+    }
     if (onUpdateMemories) {
       onUpdateMemories(memories.filter(memory => !deletedIds.has(memory.id)));
     } else if (onDeleteMemory) {
@@ -1126,7 +1131,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             <div className="space-y-2">
               <h3 id="delete-album-title" className="font-cinzel text-xl font-bold text-[#FFF2A8]">Delete “{albumToDelete.name}”?</h3>
               <p className="text-sm text-[#C8B1E4]">
-                This removes the album and all <strong className="text-rose-200">{albumToDelete.itemIds.length} {albumToDelete.itemIds.length === 1 ? "entry" : "entries"}</strong> from your vault collection. This action cannot be undone.
+                This removes the album and all <strong className="text-rose-200">{albumToDelete.itemIds.length} {albumToDelete.itemIds.length === 1 ? "entry" : "entries"}</strong> from your vault collection. Stored media remains recoverable for 30 days before permanent deletion.
               </p>
             </div>
             <div className="flex justify-end gap-3">

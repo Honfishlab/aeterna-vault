@@ -24,6 +24,7 @@ interface Job {
   hasThumbnail?: boolean;
   processingStatus?: string | null;
   processingError?: string | null;
+  albumName?: string | null;
 }
 
 const formatBytes = (bytes = 0) => {
@@ -85,6 +86,7 @@ export function BackgroundImportProgress({ onImported, onStatusChange }: {
       createdTime: job.createdTime,
       sourceProvider: job.provider,
       processingStatus: job.processingStatus,
+      albumName: job.albumName,
     })));
     const response = await fetch("/api/import-jobs/acknowledge", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ready.map(job => job.id) }),
