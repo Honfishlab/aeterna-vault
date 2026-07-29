@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { PermanentArchivePanel } from "./PermanentArchivePanel";
 import { Download, KeyRound, Laptop, Link2, ShieldCheck, Trash2, User } from "lucide-react";
 
 export function AccountManagementView({ onSignedOut }: { onSignedOut: () => void }) {
@@ -25,6 +26,7 @@ export function AccountManagementView({ onSignedOut }: { onSignedOut: () => void
       <article className="cosmic-card rounded-2xl p-5"><h2 className="flex gap-2 font-cinzel text-lg text-[#FFF2A8]"><Link2 className="w-5 h-5"/>Connected accounts</h2>{(data?.providers||[]).map((provider:any)=><div key={provider.provider} className="mt-3 rounded-xl bg-[#120B21] p-3 text-xs"><strong>{provider.provider}</strong><span className="block text-[#C8B1E4]">{provider.email||"Connected"}</span></div>)}{!(data?.providers||[]).length&&<p className="text-sm text-[#C8B1E4] mt-4">No cloud accounts connected.</p>}</article>
     </div>
     <article className="cosmic-card rounded-2xl p-5"><h2 className="flex gap-2 font-cinzel text-lg text-[#FFF2A8]"><Laptop className="w-5 h-5"/>Active devices</h2><div className="space-y-3 mt-4">{(data?.sessions||[]).map((session:any)=><div key={session.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#120B21] p-3"><div className="min-w-0"><p className="text-xs text-[#FFF2A8] truncate">{session.userAgent||"Unknown browser"}</p><p className="text-[10px] text-[#C8B1E4]">Last active {new Date(session.lastSeenAt).toLocaleString()} · {session.ipAddress||"IP unavailable"}</p></div><button onClick={()=>post("/api/account/session/revoke",{id:session.id})} className="text-xs text-rose-300">Revoke</button></div>)}</div></article>
+    <PermanentArchivePanel />
     <div className="flex flex-wrap gap-3"><button onClick={downloadExport} className="gold-beveled-btn px-4 py-2 text-xs flex gap-2"><Download className="w-4 h-4"/>Download account export</button><button onClick={deleteAccount} className="px-4 py-2 rounded-xl border border-rose-500/50 text-xs text-rose-300 flex gap-2"><Trash2 className="w-4 h-4"/>Delete account</button></div>
   </section>;
 }

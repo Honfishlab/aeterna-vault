@@ -7,6 +7,8 @@ import { acknowledgeImportJobs, cancelImportJob, jobStatus, queueDriveJobs, retr
 import { queueMediaProcessing, startMediaWorker } from "../../../server/mediaProcessing";
 import { accountPost } from "../../../server/accountRoutes";
 import { notifyUser } from "../../../server/notifications";
+import { arweaveConfigured, arweavePrice, arweaveWalletInfo, verifyArweavePayload } from "../../../server/arweaveStorage";
+import { startArweaveWorker } from "../../../server/arweaveWorker";
 import { rateLimit } from "../../../server/security";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
@@ -120,6 +122,23 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   const route = routeName(request);
 
+  if (route === "arweave/archive/jobs") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const jobs=await query("SELECT id,original_name AS \"name\",encrypted_size_bytes AS \"sizeBytes\",payload_sha256 AS \"payloadHash\",encryption_metadata AS \"encryptionMetadata\",original_content_type AS \"contentType\",status,transaction_id AS \"transactionId\",reward_winston AS \"rewardWinston\",block_height AS \"blockHeight\",confirmations,error_message AS error,created_at AS \"createdAt\",confirmed_at AS \"confirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",[user.id]);
+    return json({configured:arweaveConfigured(),jobs});
+  }
+  if (route === "arweave/archive/price") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const bytes=Math.max(1,Math.min(10*1024*1024,Number(new URL(request.url).searchParams.get("bytes")||1)));
+    try{return json({configured:arweaveConfigured(),...(await arweavePrice(bytes))});}catch(error:any){return json({configured:false,error:error?.message||"ARWEAVE_PRICE_UNAVAILABLE"},503);}
+  }
+  if (route.startsWith("arweave/archive/verify/")) {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const id=route.replace("arweave/archive/verify/",""); const rows=await query<any>("SELECT transaction_id,payload_sha256 FROM arweave_storage_jobs WHERE id=$1 AND user_id=$2",[id,user.id]);
+    if(!rows[0]?.transaction_id)return json({error:"Submitted archive not found."},404);
+    return json(await verifyArweavePayload(rows[0].transaction_id,rows[0].payload_sha256));
+  }
+
   if (route === "notifications") {
     const user = await authenticatedUser(request);
     if (!user) return json({ error: "Authentication required." },401);
@@ -130,7 +149,7 @@ export async function GET(request: Request) {
   if (route === "operations/health") {
     const user = await authenticatedUser(request);
     if (!user) return json({ error: "Authentication required." },401);
-    const queues = await query<any>("SELECT (SELECT COUNT(*) FROM media_import_jobs WHERE status IN ($$queued$$,$$transferring$$))::integer AS \"importPending\",(SELECT COUNT(*) FROM media_processing_jobs WHERE status IN ($$queued$$,$$processing$$))::integer AS \"processingPending\",(SELECT COUNT(*) FROM dead_letter_jobs WHERE resolved_at IS NULL)::integer AS \"deadLetters\"");
+    const queues = await query<any>("SELECT (SELECT COUNT(*) FROM media_import_jobs WHERE status IN ($$queued$$,$$transferring$$))::integer AS \"importPending\",(SELECT COUNT(*) FROM media_processing_jobs WHERE status IN ($$queued$$,$$processing$$))::integer AS \"processingPending\",(SELECT COUNT(*) FROM dead_letter_jobs WHERE resolved_at IS NULL)::integer AS \"deadLetters\",(SELECT COUNT(*) FROM arweave_storage_jobs WHERE status IN ($$queued$$,$$uploading$$,$$submitted$$))::integer AS \"arweavePending\"");
     const workers = await query("SELECT worker_name AS name,status,details,last_seen_at AS \"lastSeenAt\" FROM worker_heartbeats ORDER BY worker_name");
     return json({ queues: queues[0]||{},workers });
   }
@@ -293,15 +312,16 @@ export async function GET(request: Request) {
       // The endpoint still reports a degraded state below.
     }
 
+    const walletInfo = await arweaveWalletInfo().catch(() => ({ configured:false,address:null,balanceAr:null }));
     const data = {
-      configured: false,
+      configured: walletInfo.configured,
       network: 'arweave.mainnet',
       nodeUrl: 'https://arweave.net',
       status: info ? 'HEALTHY' : 'DEGRADED',
       blockHeight: info?.height ?? null,
       peersConnected: info?.peers ?? null,
-      walletAddress: null,
-      balanceAr: null,
+      walletAddress: walletInfo.address,
+      balanceAr: walletInfo.balanceAr,
       clientEncryption: 'AES-GCM-256',
       keyPolicy: 'Browser-session keys are never persisted by Aeterna Vault.',
     };
@@ -320,7 +340,27 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["arweave/archive/presign", "arweave/archive/complete", "arweave/archive/retry", "notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "arweave/archive/presign") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    if(!r2Configured())return json({error:"R2 staging is not configured."},503);
+    const name=String(body.name||"").slice(0,255),contentType=String(body.contentType||"application/octet-stream").slice(0,100),hash=String(body.payloadHash||"").toLowerCase(),size=Number(body.size||0);
+    if(!name||!/^[a-f0-9]{64}$/.test(hash)||!Number.isSafeInteger(size)||size<1||size>10*1024*1024)return json({error:"Encrypted archive must be between 1 byte and 10 MB with a SHA-256 hash."},400);
+    const id=crypto.randomUUID(),objectKey="archives/"+user.id+"/"+id+".bin";
+    const {client,PutObjectCommand,getSignedUrl}=await r2Modules(); const uploadUrl=await getSignedUrl(client,new PutObjectCommand({Bucket:r2Bucket(),Key:objectKey,ContentType:"application/octet-stream"}),{expiresIn:600});
+    await execute("INSERT INTO arweave_storage_jobs(id,user_id,media_object_id,r2_object_key,original_name,original_content_type,encrypted_size_bytes,payload_sha256,encryption_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)",[id,user.id,body.mediaId?String(body.mediaId):null,objectKey,name,contentType,size,hash,JSON.stringify(body.encryptionMetadata||{})]);
+    return json({jobId:id,uploadUrl,expiresIn:600});
+  }
+  if (route === "arweave/archive/complete") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401); const id=String(body.jobId||"");
+    const rows=await query<any>("SELECT r2_object_key,encrypted_size_bytes FROM arweave_storage_jobs WHERE id=$1 AND user_id=$2 AND status=$$staging$$",[id,user.id]); if(!rows[0])return json({error:"Staged archive not found."},404);
+    const {client,HeadObjectCommand}=await r2Modules(); const object=await client.send(new HeadObjectCommand({Bucket:r2Bucket(),Key:rows[0].r2_object_key})); if(Number(object.ContentLength||0)!==Number(rows[0].encrypted_size_bytes))return json({error:"Encrypted archive size mismatch."},409);
+    await execute("UPDATE arweave_storage_jobs SET status=$$queued$$,updated_at=NOW() WHERE id=$1",[id]); await notifyUser(user.id,"info","Permanent archive queued","Your encrypted archive is queued for Arweave.",{actionView:"audit",entityType:"arweave_storage_job",entityId:id}); return json({success:true,jobId:id});
+  }
+  if (route === "arweave/archive/retry") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401); const rows=await query("UPDATE arweave_storage_jobs SET status=$$queued$$,attempts=0,error_message=NULL,next_attempt_at=NOW(),updated_at=NOW() WHERE id=$1 AND user_id=$2 AND status=$$failed$$ RETURNING id",[String(body.jobId||""),user.id]); return rows[0]?json({success:true}):json({error:"Failed archive not found."},404);
+  }
 
   if (route === "notifications/read" || route === "notifications/clear") {
     const user = await authenticatedUser(request);
@@ -360,6 +400,11 @@ export async function POST(request: Request) {
       const job = route.endsWith("cancel") ? await cancelImportJob(user.id, String(body.id || "")) : await retryImportJob(user.id, String(body.id || ""));
       return json({ job });
     } catch (error: any) { return json({ error: "The import job could not be updated.", code: error?.message || "JOB_UPDATE_FAILED" }, 409); }
+  }
+
+  if (route === "internal/arweave-worker") {
+    if (!process.env.IMPORT_WORKER_SECRET || request.headers.get("authorization") !== "Bearer " + process.env.IMPORT_WORKER_SECRET.trim()) return json({error:"Unauthorized."},401);
+    return json(startArweaveWorker());
   }
 
   if (route === "internal/media-worker") {
