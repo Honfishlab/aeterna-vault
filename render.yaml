@@ -55,6 +55,20 @@ services:
       - key: IMPORT_WORKER_SECRET
         sync: false
 
+  - type: worker
+    name: aeterna-vault-media-worker
+    runtime: node
+    plan: starter
+    repo: https://github.com/Honfishlab/aeterna-vault.git
+    branch: main
+    buildCommand: npm install --no-audit --no-fund
+    startCommand: node scripts/media-worker.mjs
+    envVars:
+      - key: APP_BASE_URL
+        value: https://aeterna-vault-zawj.onrender.com
+      - key: IMPORT_WORKER_SECRET
+        sync: false
+
 databases:
   - name: aeterna-vault-db
     plan: basic-256mb

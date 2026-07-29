@@ -1,8 +1,9 @@
 import { execute, query } from "./db";
 import { googleAccess } from "./googleDrive";
 import { mediaTypeAllowed, r2Bucket, r2Modules, safeObjectName } from "./r2";
-import { processNextMediaJob, queueMediaProcessing } from "./mediaProcessing";
+import { queueMediaProcessing } from "./mediaProcessing";
 import { sendAccountEmail } from "./security";
+import { deadLetter, heartbeat, notifyUser } from "./notifications";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
@@ -134,9 +135,12 @@ export async function acknowledgeImportJobs(userId: string, ids: string[]) {
 
 export async function maintainImportQueue() {
   await execute("UPDATE media_import_jobs SET status=$$queued$$,attempts=0,progress=0,bytes_transferred=0,error_message=NULL,started_at=NULL,completed_at=NULL,updated_at=NOW() WHERE status=$$failed$$ AND error_message LIKE $$%media_objects_user_source_idx%$$");
-  await execute("UPDATE media_import_jobs SET status=CASE WHEN status=$$cancel_requested$$ THEN $$cancelled$$ ELSE $$queued$$ END,started_at=NULL,updated_at=NOW(),error_message=CASE WHEN status=$$transferring$$ THEN $$Recovered after an interrupted worker.$$ ELSE error_message END WHERE status IN ($$transferring$$,$$cancel_requested$$) AND updated_at<NOW()-INTERVAL $$10 minutes$$");
+  const stalled = await query<any>("UPDATE media_import_jobs SET status=CASE WHEN status=$$cancel_requested$$ THEN $$cancelled$$ ELSE $$queued$$ END,started_at=NULL,updated_at=NOW(),error_message=CASE WHEN status=$$transferring$$ THEN $$Recovered after an interrupted worker.$$ ELSE error_message END WHERE status IN ($$transferring$$,$$cancel_requested$$) AND updated_at<NOW()-INTERVAL $$10 minutes$$ RETURNING id,user_id,provider_file_name");
+  for (const job of stalled) await notifyUser(job.user_id,"warning","Stalled import recovered",job.provider_file_name + " was requeued after its worker stopped responding.",{actionView:"imports",entityType:"media_import_job",entityId:job.id});
   if (Date.now() - lastCleanupAt < 5 * 60_000) return;
   lastCleanupAt = Date.now();
+  await execute("DELETE FROM media_import_jobs WHERE status IN ($$complete$$,$$cancelled$$) AND updated_at<NOW()-INTERVAL $$90 days$$");
+  await execute("DELETE FROM user_notifications WHERE created_at<NOW()-INTERVAL $$180 days$$");
   const pending = await query<{ id: string; object_key: string }>("SELECT id,object_key FROM media_objects WHERE status=$$pending$$ AND created_at<NOW()-INTERVAL $$24 hours$$ LIMIT 100");
   const { client, DeleteObjectCommand, ListMultipartUploadsCommand, AbortMultipartUploadCommand } = await r2Modules();
   for (const object of pending) {
@@ -162,13 +166,14 @@ export function startImportWorker() {
   if (workerBusy) return { accepted: false, busy: true };
   workerBusy = true;
   void processNextImportJob()
-    .then(result => result || processNextMediaJob())
+    .then(() => undefined)
     .catch(error => console.error("Background import failed", error))
     .finally(() => { workerBusy = false; });
   return { accepted: true, busy: false };
 }
 
 export async function processNextImportJob() {
+  await heartbeat("import-worker");
   await maintainImportQueue();
   const rows = await query<any>("UPDATE media_import_jobs SET status=$$transferring$$,started_at=NOW(),attempts=attempts+1,progress=GREATEST(progress,1),updated_at=NOW() WHERE id=(SELECT id FROM media_import_jobs WHERE status=$$queued$$ AND attempts<3 AND next_attempt_at<=NOW() ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *");
   const job = rows[0];
@@ -227,9 +232,10 @@ export async function processNextImportJob() {
       await queueMediaProcessing(job.user_id, mediaId);
       if (process.env.IMPORT_EMAIL_NOTIFICATIONS === "true" && job.started_at && Date.now()-new Date(job.started_at).getTime()>120000) {
         const account = await query<any>("SELECT email FROM users WHERE id=$1",[job.user_id]);
-        if (account[0]?.email) await sendAccountEmail(account[0].email,"Aeterna Vault video transfer complete",` finished transferring and is being optimized for playback.`).catch(()=>false);
+        if (account[0]?.email) await sendAccountEmail(account[0].email,"Aeterna Vault video transfer complete",job.provider_file_name + " finished transferring and is being optimized for playback.").catch(()=>false);
       }
     }
+    if (!job.notification_sent_at) { await notifyUser(job.user_id,"success","Import complete",job.provider_file_name + " is ready in your vault.",{actionView:"imports",entityType:"media_import_job",entityId:job.id}); await execute("UPDATE media_import_jobs SET notification_sent_at=NOW() WHERE id=$1",[job.id]); }
     return { id: job.id, status: "complete" };
   } catch (error: any) {
     const state = await query<{ status: string }>("SELECT status FROM media_import_jobs WHERE id=$1", [job.id]);
@@ -241,6 +247,7 @@ export async function processNextImportJob() {
     const status = cancelled ? "cancelled" : retry ? "queued" : "failed";
     const message = quotaExceeded ? "Storage quota exceeded. Free space or upgrade, then retry." : expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
     await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,next_attempt_at=NOW()+($3*INTERVAL $$1 second$$),updated_at=NOW() WHERE id=$4", [status, message, Math.min(300, 15 * 2 ** Number(job.attempts || 0)), job.id]);
+    if (status === "failed") { await deadLetter("imports",job.id,job.user_id,message,{provider:job.provider_payload?.provider,name:job.provider_file_name}); await notifyUser(job.user_id,"error","Import needs attention",job.provider_file_name + ": " + message,{actionView:"imports",entityType:"media_import_job",entityId:job.id}); }
     return { id: job.id, status };
   }
 }

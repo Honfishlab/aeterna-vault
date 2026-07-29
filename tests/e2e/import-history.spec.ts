@@ -30,3 +30,15 @@ test("surfaces provider failures that need attention", async ({ page }) => {
   await expect(page.getByText("Provider connection interrupted.")).toBeVisible();
   await expect(page.getByText("family.mp4")).not.toBeVisible();
 });
+
+
+test("retries a failed import session with one session action", async ({ page }) => {
+  let requestBody: any = null;
+  await page.route("**/api/import-jobs/session-action", async route => {
+    requestBody = route.request().postDataJSON();
+    await route.fulfill({ contentType:"application/json",body:JSON.stringify({success:true,count:1}) });
+  });
+  await page.goto("/#imports");
+  await page.getByRole("button",{name:"Retry items"}).click();
+  expect(requestBody).toEqual({albumName:"Unassigned import",action:"retry"});
+});

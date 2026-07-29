@@ -66,10 +66,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode; onViewA
 
   const dismissNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (!id.startsWith("notif-")) void fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[id]})});
   }, []);
 
   const clearAllNotifications = useCallback(() => {
     setNotifications([]);
+    void fetch("/api/notifications/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
   }, []);
 
   const addNotification = useCallback((notification: Omit<AppNotification, 'id' | 'timestamp'>) => {
@@ -135,6 +137,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode; onViewA
       duration: 12000
     });
   }, [addNotification, onViewAuditLog]);
+
+  useEffect(() => {
+    let active=true;
+    const refresh=async()=>{
+      const response=await fetch("/api/notifications");
+      if(!response.ok||!active)return;
+      const result=await response.json();
+      const durable=(result.notifications||[]).filter((item:any)=>!item.readAt).map((item:any)=>({ id:item.id,type:item.type,title:item.title,message:item.message,timestamp:new Date(item.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),duration:0 }));
+      setNotifications(previous=>[...durable,...previous.filter(item=>item.id.startsWith("notif-") )].slice(0,25));
+    };
+    void refresh(); const timer=window.setInterval(refresh,15000);
+    return()=>{active=false;window.clearInterval(timer);};
+  },[]);
 
   // Listen for window custom events for global non-React triggers
   useEffect(() => {

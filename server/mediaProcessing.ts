@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { execute, query } from "./db";
 import { r2Bucket, r2Modules } from "./r2";
+import { deadLetter, heartbeat, notifyUser } from "./notifications";
 
 const ffmpegPath = process.env.FFMPEG_BIN || join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 
@@ -19,8 +20,13 @@ export async function queueMediaProcessing(userId: string, mediaId: string) {
   await execute("UPDATE media_objects SET processing_status=CASE WHEN processing_status=$$ready$$ THEN $$ready$$ ELSE $$queued$$ END,processing_error=NULL WHERE id=$1", [mediaId]);
 }
 
+let mediaWorkerBusy=false;
+export function startMediaWorker() { if(mediaWorkerBusy)return {accepted:false,busy:true}; mediaWorkerBusy=true; void processNextMediaJob().catch(error=>console.error("Media worker failed",error)).finally(()=>{mediaWorkerBusy=false;}); return {accepted:true,busy:false}; }
+
 export async function processNextMediaJob() {
-  await execute("UPDATE media_processing_jobs SET status=$$queued$$,next_attempt_at=NOW()+INTERVAL $$30 seconds$$,error_message=$$Recovered after an interrupted processing worker.$$,updated_at=NOW() WHERE status=$$processing$$ AND updated_at<NOW()-INTERVAL $$60 minutes$$");
+  await heartbeat("media-worker");
+  const stalled = await query<any>("UPDATE media_processing_jobs SET status=$$queued$$,next_attempt_at=NOW()+INTERVAL $$30 seconds$$,error_message=$$Recovered after an interrupted processing worker.$$,updated_at=NOW() WHERE status=$$processing$$ AND updated_at<NOW()-INTERVAL $$60 minutes$$ RETURNING id,user_id,media_object_id");
+  for (const item of stalled) await notifyUser(item.user_id,"warning","Video processing recovered","A stalled video job was automatically requeued.",{actionView:"imports",entityType:"media_processing_job",entityId:item.id});
   const rows = await query<any>("UPDATE media_processing_jobs SET status=$$processing$$,attempts=attempts+1,progress=5,started_at=NOW(),updated_at=NOW() WHERE id=(SELECT id FROM media_processing_jobs WHERE status=$$queued$$ AND attempts<3 AND next_attempt_at<=NOW() ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *");
   const job = rows[0];
   if (!job) return null;
@@ -57,6 +63,7 @@ export async function processNextMediaJob() {
     }
     await execute("UPDATE media_objects SET playback_object_key=$1,playback_variants=$2::jsonb,thumbnail_object_key=$3,thumbnail_variants=$4::jsonb,technical_metadata=$5::jsonb,processing_status=$$ready$$,processing_error=NULL WHERE id=$6", [playbackKey, JSON.stringify(playbackVariants), variants.large, JSON.stringify(variants), JSON.stringify({ width: media.width, height: media.height, durationMs: Number(media.duration_ms || 0), posterSecond, orientationCorrected: true, codec: "h264", audioCodec: "aac" }), media.id]);
     await execute("UPDATE media_processing_jobs SET status=$$complete$$,progress=100,completed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$1", [job.id]);
+    if (!job.notification_sent_at) { await notifyUser(job.user_id,"success","Video ready","Your video is optimized and ready to play.",{actionView:"search",entityType:"media_processing_job",entityId:job.id}); await execute("UPDATE media_processing_jobs SET notification_sent_at=NOW() WHERE id=$1",[job.id]); }
     return { id: job.id, status: "complete" };
   } catch (error: any) {
     const retry = Number(job.attempts || 0) < 3;
@@ -64,6 +71,7 @@ export async function processNextMediaJob() {
     const message = String(error?.message || "TRANSCODE_FAILED").slice(0, 500);
     await execute("UPDATE media_processing_jobs SET status=$1,error_message=$2,next_attempt_at=NOW()+($3*INTERVAL $$1 second$$),updated_at=NOW() WHERE id=$4", [status, message, Math.min(300, 15 * 2 ** Number(job.attempts || 0)), job.id]);
     await execute("UPDATE media_objects SET processing_status=$1,processing_error=$2 WHERE id=$3", [retry ? "queued" : "failed", message, job.media_object_id]);
+    if (!retry) { await deadLetter("media-processing",job.id,job.user_id,message,{mediaId:job.media_object_id}); await notifyUser(job.user_id,"error","Video processing failed",message,{actionView:"imports",entityType:"media_processing_job",entityId:job.id}); }
     return { id: job.id, status };
   } finally {
     await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
