@@ -187,7 +187,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
   const runLiveGatewayAudit = async () => {
     setIsAuditing(true);
     const targetItems = [
-      ...memories.map(m => ({ id: m.id, txId: m.permawebTxId })),
+      ...memories.filter(m => Boolean(m.permawebTxId)).map(m => ({ id: m.id, txId: m.permawebTxId })),
       ...letters.map(l => ({ id: l.id, txId: l.arweaveId }))
     ];
 
@@ -208,7 +208,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
     const runVerification = async () => {
       setIsAuditing(true);
       const targetItems = [
-        ...memories.map(m => ({ id: m.id, txId: m.permawebTxId })),
+        ...memories.filter(m => Boolean(m.permawebTxId)).map(m => ({ id: m.id, txId: m.permawebTxId })),
         ...letters.map(l => ({ id: l.id, txId: l.arweaveId }))
       ];
 
@@ -231,7 +231,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
 
   // Combine memories and letters into unified audited items list with live gateway state
   const auditItems = useMemo(() => {
-    const memoryRecords = memories.map((m, idx) => {
+    const memoryRecords = memories.filter(m => Boolean(m.permawebTxId)).map((m, idx) => {
       const verified = verificationMap[m.id];
       return {
         id: m.id,
@@ -239,7 +239,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
         category: m.category || 'Personal',
         date: m.date || 'Recent',
         type: 'Memory Media Asset',
-        txId: m.permawebTxId || `tx_perm_${m.id.slice(0, 8)}`,
+        txId: m.permawebTxId!,
         encryption: m.encryptionLevel || 'AES-GCM-256 Vault',
         size: `${(1.2 + (idx % 4) * 0.8).toFixed(2)} MB`,
         blockHeight: 1482935 - (idx * 12),

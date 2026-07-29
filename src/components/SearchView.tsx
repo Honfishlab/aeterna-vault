@@ -538,7 +538,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       imageUrl: item.url,
       description: editAlbumDescription || `Added to ${newTitle} album`,
       encryptionLevel: 'Level 5 Protected',
-      permawebTxId: `ar_alb_item_${Math.random().toString(36).substring(2, 9)}`,
+      archiveStatus: 'r2_only',
       tags: Array.from(new Set([...tagArray, 'Album', newTitle])),
       albumName: newTitle,
       isCoverPhoto: editLeadPhotoId === item.id
@@ -986,7 +986,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             e.stopPropagation();
                             handleOpenEditAlbum(mem.albumName!);
                           }}
-                          className="w-8 h-8 rounded-full bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
+                          className="w-8 h-8 rounded-full disabled:opacity-30 disabled:cursor-not-allowed bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
                           title="Edit Album Details"
                         >
                           <FolderEdit className="w-3.5 h-3.5" />
@@ -996,10 +996,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onSelectView('immortal');
+                          if (mem.permawebTxId) onSelectView('immortal');
                         }}
+                        disabled={!mem.permawebTxId}
                         className="w-8 h-8 rounded-full bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
-                        title="Immortal Gateway Independent Viewer"
+                        title={mem.permawebTxId ? "Immortal Gateway Independent Viewer" : "Not submitted to Arweave"}
                       >
                         <Globe className="w-3.5 h-3.5" />
                       </button>

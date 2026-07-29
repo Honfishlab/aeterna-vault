@@ -345,7 +345,7 @@ export const MemorialsView: React.FC<MemorialsViewProps> = ({
     location: shrine.restingPlace || 'Digital Ancestral Shrine',
     imageUrl: shrine.imageUrl,
     encryptionLevel: 'Level 5 Protected',
-    permawebTxId: `arweave_shrine_tx_${shrine.id.slice(0, 16)}`,
+    archiveStatus: 'r2_only',
     albumName: 'Digital Ancestral Shrines',
     tags: ['shrine', 'ancestor', 'memorial']
   });

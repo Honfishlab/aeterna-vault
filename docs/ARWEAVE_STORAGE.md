@@ -30,3 +30,8 @@ Only concise technical tags are published: application and schema version, archi
 
 The user must retain the archival passphrase. The database stores salt, IV, KDF algorithm, and iteration count, but never the passphrase or derived encryption key. Losing the passphrase makes the permanent ciphertext unrecoverable.
 
+
+
+## Normal media uploads
+
+The upload form always preserves the operational original in private R2. For a local file under 10 MB, entering a 12+ character permanent-archive passphrase also creates a browser-encrypted Arweave job linked to the media object. The viewer reads the latest job from PostgreSQL and displays `r2_only`, `queued`, `uploading`, `submitted`, `confirmed`, or `failed`. It never constructs or displays a transaction ID unless the worker has returned one from an accepted Arweave submission.

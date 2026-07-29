@@ -34,6 +34,10 @@ export interface ImageViewerData {
     tags?: string[];
   };
   permawebTxId?: string;
+  archiveJobId?: string;
+  archiveStatus?: "r2_only" | "staging" | "queued" | "uploading" | "submitted" | "confirmed" | "failed";
+  archiveError?: string;
+  archiveConfirmations?: number;
   encryptionLevel?: string;
   blockHeight?: number;
 }
@@ -74,6 +78,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [thumbnailSaving, setThumbnailSaving] = useState(false);
+  const [archive, setArchive] = useState<any>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0, originX: 0, originY: 0 });
@@ -123,6 +128,19 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [image?.id, images]);
 
   useEffect(() => {
+    setArchive(null);
+    if (!image?.mediaId) return;
+    let active=true;
+    const load=async()=>{
+      const response=await fetch("/api/media/status?ids="+encodeURIComponent(image.mediaId!));
+      if(response.ok&&active){const body=await response.json();setArchive(body.media?.[0]||null);}
+    };
+    void load();
+    const timer=window.setInterval(load,10000);
+    return()=>{active=false;window.clearInterval(timer);};
+  },[image?.mediaId]);
+
+  useEffect(() => {
     const listener = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener('fullscreenchange', listener);
     return () => document.removeEventListener('fullscreenchange', listener);
@@ -132,8 +150,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const isVideo = image.mediaType === 'video' || Boolean(image.videoUrl);
   const mediaUrl = isVideo ? image.videoUrl : image.imageUrl;
-  const txId = image.permawebTxId || 'ar_9xK2mP1a8f331';
-  const arweaveUrl = `https://arweave.net/${txId}`;
+  const archiveState = archive || image;
+  const txId = archiveState.permawebTxId as string | undefined;
+  const archiveStatus = archiveState.archiveStatus || (image.mediaId ? "r2_only" : undefined);
+  const arweaveUrl = txId ? "https://arweave.net/" + txId : undefined;
   const encryption = image.encryptionLevel || 'AES-GCM-256 Vault';
 
   const selectCurrentVideoFrame = async () => {
@@ -148,6 +168,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleCopyLink = () => {
+    if (!arweaveUrl) return;
     navigator.clipboard.writeText(arweaveUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -171,7 +192,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <div className="flex items-center space-x-2 text-[10px] font-mono text-[#F5D77F]">
               <span>{image.category || 'Personal'}</span>
               <span>•</span>
-              <span>Arweave Tx: {txId.slice(0, 10)}...</span>
+              <span>{txId ? "Arweave Tx: " + txId.slice(0, 10) + "..." : "Storage: " + (archiveStatus === "r2_only" ? "Private R2 only" : archiveStatus || "not archived")}</span>
             </div>
           </div>
         </div>
@@ -186,7 +207,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <button onClick={() => { if (!isPlaying) stageRef.current?.requestFullscreen?.(); setIsPlaying(value => !value); }} className={isPlaying ? 'p-2 rounded-full bg-[#DFB260] text-black' : 'p-2 rounded-full hover:bg-white/15'} title="Cinematic slideshow (Space)">{isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
             <button onClick={() => isFullscreen ? document.exitFullscreen() : stageRef.current?.requestFullscreen?.()} className="p-2 rounded-full hover:bg-white/15" title="Fullscreen (F)">{isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</button>
           </div>
-          {onSelectView && (
+          {onSelectView && txId && (
             <button
               onClick={() => {
                 onClose();
@@ -212,8 +233,9 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
           <button
             onClick={handleCopyLink}
-            className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-            title="Copy Immutable Arweave URL"
+            disabled={!txId}
+            className="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            title={txId ? "Copy verified Arweave URL" : "This file is not submitted to Arweave"}
           >
             {copiedLink ? <Check className="w-5 h-5 text-emerald-400" /> : <Share2 className="w-5 h-5" />}
           </button>
@@ -557,69 +579,18 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
                 {/* Permanent Storage Specs */}
                 <div className="bg-[#120B21] p-3.5 rounded-xl border border-[#DFB260]/30 space-y-2">
-                  <span className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider font-bold block">
-                    Permanent Storage Specs
-                  </span>
-                  <div className="space-y-1 text-[11px] font-mono text-[#C8B1E4]">
-                    <div className="flex justify-between">
-                      <span>Encryption:</span>
-                      <span className="text-[#FFF2A8] font-semibold">{encryption}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Storage Network:</span>
-                      <span className="text-[#FFF2A8] font-semibold">Arweave Permaweb</span>
-                    </div>
-                    {image.blockHeight && (
-                      <div className="flex justify-between">
-                        <span>Block Height:</span>
-                        <span className="text-[#FFF2A8] font-semibold">#{image.blockHeight}</span>
-                      </div>
-                    )}
-                    <div className="truncate pt-1 border-t border-[#DFB260]/20">
-                      <span>Tx ID: </span>
-                      <span className="text-[#F5D77F] font-bold">{txId}</span>
-                    </div>
-
-                    <div className="pt-2 border-t border-[#DFB260]/30 space-y-2">
-                      <span className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider font-bold block">
-                        Immortal Gateway Independent Viewer
-                      </span>
-                      <a
-                        href={arweaveUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full bg-[#23173A] hover:bg-[#322252] text-[#FFF2A8] text-xs font-mono font-bold py-2.5 px-3 rounded-xl border border-[#DFB260]/60 flex items-center justify-between transition-colors group cursor-pointer shadow-sm"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Globe className="w-4 h-4 text-[#F5D77F]" />
-                          <span>Launch Arweave Viewer</span>
-                        </span>
-                        <ExternalLink className="w-3.5 h-3.5 text-[#F5D77F] group-hover:translate-x-1 transition-transform" />
+                  <span className="text-[10px] font-mono text-[#F5D77F] uppercase tracking-wider font-bold block">Permanent storage</span>
+                  <div className="space-y-2 text-[11px] font-mono text-[#C8B1E4]">
+                    <div className="flex justify-between"><span>Operational copy:</span><span className="text-emerald-300 font-semibold">{image.mediaId ? "Private R2 ready" : "Not linked"}</span></div>
+                    <div className="flex justify-between"><span>Arweave:</span><span className="text-[#FFF2A8] font-semibold uppercase">{archiveStatus || "not requested"}</span></div>
+                    {archiveState.archiveConfirmations > 0 && <div className="flex justify-between"><span>Confirmations:</span><span>{archiveState.archiveConfirmations}</span></div>}
+                    {archiveState.archiveError && <p className="rounded-lg bg-rose-500/10 p-2 text-rose-300">{archiveState.archiveError}</p>}
+                    {txId ? <>
+                      <div className="break-all pt-2 border-t border-[#DFB260]/20"><span>Real Tx ID: </span><span className="text-[#F5D77F] font-bold">{txId}</span></div>
+                      <a href={arweaveUrl} target="_blank" rel="noreferrer" className="w-full bg-[#23173A] hover:bg-[#322252] text-[#FFF2A8] text-xs font-mono font-bold py-2.5 px-3 rounded-xl border border-[#DFB260]/60 flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Globe className="w-4 h-4"/>Open submitted transaction</span><ExternalLink className="w-3.5 h-3.5"/>
                       </a>
-                      <div className="flex flex-col gap-1.5 pt-1">
-                        <a
-                          href={`/gateway/${txId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] font-mono text-[#FFF2A8] bg-[#DFB260]/20 hover:bg-[#DFB260]/30 border border-[#DFB260]/60 p-2 rounded-lg flex items-center justify-between font-bold transition-all shadow-sm"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>App Gateway Inspector</span>
-                          </span>
-                          <ExternalLink className="w-3 h-3 text-[#F5D77F]" />
-                        </a>
-                        <a
-                          href={arweaveUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] font-mono text-[#F5D77F] hover:underline flex items-center gap-1 font-bold px-1"
-                        >
-                          <ExternalLink className="w-3 h-3 text-[#F5D77F]" />
-                          <span className="truncate">{arweaveUrl}</span>
-                        </a>
-                      </div>
-                    </div>
+                    </> : <p className="rounded-lg bg-black/20 p-2">No Arweave transaction exists for this file. Gateway actions remain disabled until submission.</p>}
                   </div>
                 </div>
               </div>
@@ -627,7 +598,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
             {/* Sidebar Actions */}
             <div className="pt-4 border-t border-[#DFB260]/30 space-y-2">
-              {onSelectView && (
+              {onSelectView && txId && (
                 <button
                   onClick={() => {
                     onClose();
@@ -652,10 +623,11 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
               <button
                 onClick={handleCopyLink}
-                className="gold-filled-btn w-full text-xs py-2 font-bold flex items-center justify-center gap-2 cursor-pointer"
+                disabled={!txId}
+                className="gold-filled-btn disabled:opacity-40 disabled:cursor-not-allowed w-full text-xs py-2 font-bold flex items-center justify-center gap-2 cursor-pointer"
               >
                 {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                <span>{copiedLink ? 'Link Copied!' : 'Share Immutable Link'}</span>
+                <span>{!txId ? 'Not on Arweave' : copiedLink ? 'Link Copied!' : 'Share Immutable Link'}</span>
               </button>
             </div>
           </div>

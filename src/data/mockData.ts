@@ -10,7 +10,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800',
     description: 'The vows exchange surrounded by 120 family members and friends. Sunlight streaming through stained glass.',
     encryptionLevel: 'Level 5 Protected',
-    permawebTxId: 'ar_w3dd1ng_99812a',
+    archiveStatus: 'r2_only',
     tags: ['Wedding 2012', 'Family', 'Boston', 'Ceremony'],
     people: ['Wayne', 'Clara Pendelton', 'Family Bride & Groom'],
     autoTags: {
@@ -29,7 +29,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&q=80&w=800',
     description: 'Gold bands inscribed with coordinates of our first summit hike in Vermont.',
     encryptionLevel: 'Level 5 Protected',
-    permawebTxId: 'ar_r1ngs_44120x',
+    archiveStatus: 'r2_only',
     tags: ['Wedding 2012', 'Rings', 'Heirloom'],
     people: ['Wayne', 'Clara Pendelton'],
     autoTags: {
@@ -48,7 +48,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=800',
     description: 'Grandfather Edward giving the traditional family toast with vintage 1998 champagne.',
     encryptionLevel: 'Standard',
-    permawebTxId: 'ar_t0ast_88192z',
+    archiveStatus: 'r2_only',
     tags: ['Wedding 2012', 'Toast', 'Edward'],
     people: ['Grandfather Edward', 'Thomas Pendelton'],
     autoTags: {
@@ -67,7 +67,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?auto=format&fit=crop&q=80&w=800',
     description: 'Handcrafted white peony floral arrangements illuminated by amber fairy lanterns.',
     encryptionLevel: 'Standard',
-    permawebTxId: 'ar_d3c0r_10928a',
+    archiveStatus: 'r2_only',
     tags: ['Wedding 2012', 'Decor', 'Flowers'],
     people: ['Estate Gardeners', 'Family Committee'],
     autoTags: {
@@ -86,7 +86,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1544077960-604201fe74bc?auto=format&fit=crop&q=80&w=800',
     description: 'Panoramic view of Oakhaven Manor at golden hour during the evening reception.',
     encryptionLevel: 'Standard',
-    permawebTxId: 'ar_v3nu3_55219m',
+    archiveStatus: 'r2_only',
     tags: ['Wedding 2012', 'Venue', 'Manor'],
     people: ['Pendelton Family'],
     autoTags: {
@@ -105,7 +105,7 @@ export const INITIAL_MEMORIES: MemoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800',
     description: 'Full family retreat by the coastal lighthouse. Three generations together.',
     encryptionLevel: 'Vault Level 3',
-    permawebTxId: 'ar_s4mm3r_99210k',
+    archiveStatus: 'r2_only',
     tags: ['Summer 2024', 'Cape Cod', 'Beach'],
     people: ['Wayne', 'Clara Pendelton', 'Grandchildren'],
     autoTags: {

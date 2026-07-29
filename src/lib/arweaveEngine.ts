@@ -154,8 +154,8 @@ export async function createPermawebTransaction(params: {
     ? new TextEncoder().encode(params.data).byteLength 
     : params.data.byteLength;
 
-  let txId = generateArweaveTxId();
-  let status: 'PENDING' | 'SEALED_ON_CHAIN' | 'CONFIRMED' = 'SEALED_ON_CHAIN';
+  let txId = "";
+  let status: 'PENDING' | 'SEALED_ON_CHAIN' | 'CONFIRMED' = 'PENDING';
   let reward = (sizeBytes * 0.00000021).toFixed(6);
   let owner = params.ownerAddress || 'Wallet not connected';
 
@@ -243,7 +243,7 @@ export async function createPermawebTransaction(params: {
     quantity: '0',
     reward,
     tags,
-    blockHeight: 1482931 + Math.floor(Math.random() * 50),
+    blockHeight: 0,
     timestamp: Date.now(),
     status,
     contentType: params.contentType,

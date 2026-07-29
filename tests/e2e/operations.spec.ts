@@ -58,3 +58,16 @@ test("encrypts a small archive before staging and queues it for Arweave", async 
   expect(authorization.encryptionMetadata.algorithm).toBe("AES-256-GCM");
   expect(stagedBytes).toBeGreaterThan(Buffer.byteLength("private family archive proof"));
 });
+
+
+test("viewer shows database archive state and never invents a transaction", async ({ page }) => {
+  const memory={id:"memory-1",mediaId:"media-1",title:"R2 only proof",category:"Family",date:"Aug 18, 2024",imageUrl:"https://example.com/photo.jpg",description:"Private original",encryptionLevel:"Level 5 Protected",tags:[],archiveStatus:"r2_only"};
+  await page.route("**/api/vault/data", route => route.fulfill({contentType:"application/json",body:JSON.stringify({data:{memories:[memory],letters:[],memorials:[],heirs:[]},revision:1})}));
+  await page.route("**/api/media/status?ids=media-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({media:[{id:"media-1",archiveStatus:"r2_only",permawebTxId:null}]})}));
+  await page.goto("/#search");
+  await page.getByText("R2 only proof",{exact:true}).first().click();
+  await page.getByTitle("Toggle Details Info Sidebar").click();
+  await expect(page.getByText("No Arweave transaction exists for this file.",{exact:false})).toBeVisible();
+  await expect(page.getByRole("link",{name:/Open submitted transaction/i})).toHaveCount(0);
+  await expect(page.getByText(/ar_9xK2mP1a8f331/i)).toHaveCount(0);
+});

@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
 import { MemoryItem, LegacyLetter, Heir } from '../types';
 import { ImageViewerModal } from './ImageViewerModal';
-import { 
-  ShieldCheck, 
-  Download, 
-  Globe, 
-  HardDrive, 
-  Terminal, 
-  ExternalLink, 
-  Key, 
-  Lock, 
-  Unlock, 
-  CheckCircle2, 
-  Search, 
-  FileCode, 
-  Cpu, 
-  RefreshCw, 
-  Sparkles, 
+import {
+  ShieldCheck,
+  Download,
+  Globe,
+  HardDrive,
+  Terminal,
+  ExternalLink,
+  Key,
+  Lock,
+  Unlock,
+  CheckCircle2,
+  Search,
+  FileCode,
+  Cpu,
+  RefreshCw,
+  Sparkles,
   ShieldAlert,
   Radio,
   FileCheck,
@@ -42,7 +42,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
   heirs,
   onSelectView
 }) => {
-  const [selectedTxId, setSelectedTxId] = useState<string>(memories[0]?.permawebTxId || 'ar_9xK2mP1a8f331');
+  const [selectedTxId, setSelectedTxId] = useState<string>(memories.find(memory => memory.permawebTxId)?.permawebTxId || "");
   const [passcode, setPasscode] = useState('');
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
@@ -62,11 +62,11 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
   // Combine all permaweb assets
   const allTxList = [
-    ...memories.map(m => ({ 
-      id: m.permawebTxId, 
-      title: m.title, 
-      type: m.category, 
-      date: m.date, 
+    ...memories.filter(m => Boolean(m.permawebTxId)).map(m => ({
+      id: m.permawebTxId,
+      title: m.title,
+      type: m.category,
+      date: m.date,
       time: m.time,
       location: m.location,
       imageUrl: m.imageUrl,
@@ -74,14 +74,14 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       albumName: m.albumName,
       tags: m.tags || [],
       encryptionLevel: m.encryptionLevel,
-      encrypted: m.encryptionLevel !== 'Standard', 
-      hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' 
+      encrypted: m.encryptionLevel !== 'Standard',
+      hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
     })),
-    ...letters.map(l => ({ 
-      id: l.arweaveId, 
-      title: l.title, 
-      type: 'Time Capsule Letter', 
-      date: 'Permanent', 
+    ...letters.map(l => ({
+      id: l.arweaveId,
+      title: l.title,
+      type: 'Time Capsule Letter',
+      date: 'Permanent',
       time: undefined,
       location: undefined,
       imageUrl: undefined,
@@ -89,8 +89,8 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       albumName: undefined,
       tags: ['Legacy Letter', l.recipient],
       encryptionLevel: 'Quantum-Proof',
-      encrypted: true, 
-      hash: '0x8f19a2b04c8e71d371109a224c8' 
+      encrypted: true,
+      hash: '0x8f19a2b04c8e71d371109a224c8'
     }))
   ];
 
@@ -130,32 +130,32 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       --muted: #A896C5;
     }
     * { box-sizing: border-box; }
-    body { 
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-      background: var(--bg); 
-      color: var(--text); 
-      margin: 0; 
-      padding: 1.5rem; 
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
       line-height: 1.5;
     }
     .container { max-width: 1080px; margin: 0 auto; }
-    .header-card { 
-      background: linear-gradient(135deg, #1C1232 0%, #120A22 100%); 
-      border: 2px solid #DFB260; 
-      border-radius: 1.25rem; 
-      padding: 2rem; 
-      margin-bottom: 2rem; 
-      box-shadow: 0 15px 35px rgba(0,0,0,0.6); 
+    .header-card {
+      background: linear-gradient(135deg, #1C1232 0%, #120A22 100%);
+      border: 2px solid #DFB260;
+      border-radius: 1.25rem;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.6);
     }
     h1 { font-family: Georgia, serif; color: var(--gold-bright); margin: 0.5rem 0; font-size: 2rem; }
-    .badge { 
-      background: rgba(223, 178, 96, 0.2); 
-      color: var(--gold-bright); 
-      border: 1px solid rgba(223, 178, 96, 0.5); 
-      padding: 0.3rem 0.8rem; 
-      border-radius: 999px; 
-      font-size: 0.75rem; 
-      font-weight: bold; 
+    .badge {
+      background: rgba(223, 178, 96, 0.2);
+      color: var(--gold-bright);
+      border: 1px solid rgba(223, 178, 96, 0.5);
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: bold;
       display: inline-block;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -242,13 +242,13 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
     }
     .asset-title { font-weight: bold; font-size: 1.1rem; color: var(--gold-bright); font-family: Georgia, serif; margin: 0; }
     .meta-row { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-family: monospace; }
-    .tx-id-box { 
-      background: #110B1E; 
-      border: 1px solid var(--card-border); 
-      padding: 0.5rem; 
-      border-radius: 0.5rem; 
-      font-family: monospace; 
-      font-size: 0.75rem; 
+    .tx-id-box {
+      background: #110B1E;
+      border: 1px solid var(--card-border);
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+      font-family: monospace;
+      font-size: 0.75rem;
       color: var(--gold);
       word-break: break-all;
     }
@@ -278,7 +278,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       cursor: pointer;
     }
     .btn-action:hover { background: #DFB260; color: #0C0816; }
-    
+
     /* Modal Lightbox */
     .modal {
       display: none;
@@ -317,7 +317,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       <span class="badge">IMMUTABLE STANDALONE WEB3 VIEWER</span>
       <h1>Aeterna Sovereign Vault Engine</h1>
       <p>This self-contained permapage runs 100% client-side with zero dependencies. Even if servers or domain names vanish, your vault media remains viewable globally across all Arweave nodes.</p>
-      
+
       <div>
         <strong style="font-size: 0.85rem; color: var(--gold);">Decentralized Gateway Mirrors:</strong>
         <div class="gateways-bar">
@@ -345,7 +345,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
     assets.forEach(a => {
       const card = document.createElement('div');
       card.className = 'asset-card';
-      
+
       let mediaHtml = '';
       if (a.imageUrl) {
         mediaHtml = \`
@@ -515,7 +515,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
   return (
     <div id="immortal-gateway-view" className="space-y-8 pb-20 text-[#E8DDF5]">
-      
+
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -561,7 +561,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
       {/* Hero Banner: Why This Guarantees Eternal Access */}
       <div className="cosmic-card-gold p-6 sm:p-8 rounded-3xl shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[#7353A0]/20 blur-3xl rounded-full pointer-events-none"></div>
-        
+
         <div className="relative z-10 space-y-4 max-w-3xl">
           <div className="flex items-center space-x-2">
             <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-[#DFB260]/20 text-[#FFF2A8] border border-[#DFB260]/40">
@@ -742,7 +742,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
         {/* 3 Steps Architecture Display */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans">
-          
+
           {/* Step 1 */}
           <div className="bg-[#120B21]/80 border border-[#DFB260]/30 p-4 rounded-2xl space-y-2">
             <div className="flex items-center justify-between text-xs">
@@ -895,7 +895,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
       {/* Main 2-Column Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Column: List of All Permaweb Vault Assets */}
         <div className="lg:col-span-1 cosmic-card p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-[#DFB260]/30 pb-3">
@@ -923,9 +923,9 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
                 >
                   {/* Thumbnail */}
                   {asset.imageUrl ? (
-                    <img 
-                      src={asset.imageUrl} 
-                      alt={asset.title} 
+                    <img
+                      src={asset.imageUrl}
+                      alt={asset.title}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedTxId(asset.id);
@@ -964,7 +964,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
 
         {/* Right Column: Live Arweave Media Viewer & Gateway Inspector */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* PROMINENT LIVE IMMORTAL MEDIA VIEWER FRAME */}
           <div className="cosmic-card p-6 space-y-5 border-2 border-[#DFB260] shadow-2xl relative">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DFB260]/30 pb-4">
@@ -1027,8 +1027,8 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
               {currentAsset?.imageUrl ? (
                 <div className="w-full space-y-4">
                   <div className="relative group max-h-[420px] flex items-center justify-center bg-[#05020A] rounded-xl p-2 border border-[#DFB260]/20">
-                    <img 
-                      src={getMediaUrlForGateway(currentAsset)} 
+                    <img
+                      src={getMediaUrlForGateway(currentAsset)}
                       alt={currentAsset.title}
                       onClick={() => setPreviewLightboxOpen(true)}
                       className="max-h-[380px] w-auto max-w-full object-contain rounded-lg shadow-2xl transition-transform duration-300 group-hover:scale-[1.01] cursor-pointer"
@@ -1100,7 +1100,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
               )}
             </div>
           </div>
-          
+
           {/* Box 1: Direct Arweave Node Transaction Inspector */}
           <div className="cosmic-card p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between">
@@ -1145,7 +1145,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = ({
               <label className="block text-xs font-semibold text-[#FFF2A8]">
                 Test Direct Access via Permaweb Gateways & Independent Inspectors:
               </label>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs font-mono">
                 <a
                   href={`/gateway/${selectedTxId}`}

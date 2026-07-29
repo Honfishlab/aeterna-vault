@@ -58,7 +58,11 @@ export interface MemoryItem {
   processingStatus?: 'not_required' | 'queued' | 'processing' | 'ready' | 'failed';
   description: string;
   encryptionLevel: 'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof';
-  permawebTxId: string;
+  permawebTxId?: string;
+  archiveJobId?: string;
+  archiveStatus?: "r2_only" | "staging" | "queued" | "uploading" | "submitted" | "confirmed" | "failed";
+  archiveError?: string;
+  archiveConfirmations?: number;
   tags: string[];
   people?: string[];
   albumName?: string;

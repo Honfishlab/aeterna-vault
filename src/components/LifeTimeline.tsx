@@ -100,7 +100,7 @@ export const LifeTimeline: React.FC<LifeTimelineProps> = ({
       mediaType: ms.videoUrl ? 'video' : 'photo',
       description: ms.description,
       encryptionLevel: 'Vault Level 3',
-      permawebTxId: `ar_timeline_${ms.year}_${Date.now()}`,
+      archiveStatus: 'r2_only',
       tags: ms.tags || [ms.category || 'Milestone']
     };
     setLightboxMemory(item);

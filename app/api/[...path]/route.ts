@@ -242,8 +242,17 @@ export async function GET(request: Request) {
     try {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
-      const rows = await query<{ data: unknown; revision: number }>("SELECT data, revision FROM vault_snapshots WHERE user_id = $1", [user.id]);
-      return json({ data: rows[0]?.data ?? null, revision: Number(rows[0]?.revision || 0) });
+      const rows = await query<{ data: any; revision: number }>("SELECT data, revision FROM vault_snapshots WHERE user_id = $1", [user.id]);
+      const data=rows[0]?.data??null;
+      if(data&&Array.isArray(data.memories)){
+        const ids=data.memories.map((item:any)=>item.mediaId).filter(Boolean);
+        if(ids.length){
+          const archives=await query<any>("SELECT DISTINCT ON (media_object_id) media_object_id AS \"mediaId\",id AS \"archiveJobId\",status AS \"archiveStatus\",transaction_id AS \"permawebTxId\",error_message AS \"archiveError\",confirmations AS \"archiveConfirmations\" FROM arweave_storage_jobs WHERE user_id=$1 AND media_object_id=ANY($2::text[]) ORDER BY media_object_id,created_at DESC",[user.id,ids]);
+          const byMedia=new Map(archives.map((archive:any)=>[archive.mediaId,archive]));
+          data.memories=data.memories.map((item:any)=>({...item,permawebTxId:undefined,archiveStatus:item.mediaId?"r2_only":undefined,...(item.mediaId?byMedia.get(item.mediaId)||{}:{})}));
+        }
+      }
+      return json({ data, revision: Number(rows[0]?.revision || 0) });
     } catch (error) { return json(databaseError(error), 503); }
   }
   if (route === "media/status") {
@@ -251,7 +260,7 @@ export async function GET(request: Request) {
     if (!user) return json({ error: "Authentication required." }, 401);
     const ids = (new URL(request.url).searchParams.get("ids") || "").split(",").filter(Boolean).slice(0, 200);
     if (!ids.length) return json({ media: [] });
-    const media = await query("SELECT id,processing_status AS \"processingStatus\",processing_error AS \"processingError\",thumbnail_object_key IS NOT NULL AS \"hasThumbnail\" FROM media_objects WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, ids]);
+    const media = await query("SELECT m.id,m.processing_status AS \"processingStatus\",m.processing_error AS \"processingError\",m.thumbnail_object_key IS NOT NULL AS \"hasThumbnail\",COALESCE(a.status,$$r2_only$$) AS \"archiveStatus\",a.id AS \"archiveJobId\",a.transaction_id AS \"permawebTxId\",a.error_message AS \"archiveError\",a.confirmations AS \"archiveConfirmations\" FROM media_objects m LEFT JOIN LATERAL (SELECT id,status,transaction_id,error_message,confirmations FROM arweave_storage_jobs WHERE media_object_id=m.id ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE m.user_id=$1 AND m.id=ANY($2::text[])", [user.id, ids]);
     return json({ media });
   }
 

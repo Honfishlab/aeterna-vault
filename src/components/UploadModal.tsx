@@ -1,13 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { MemoryItem } from '../types';
-import { 
-  createPermawebTransaction, 
-  encryptData, 
-  saveTransactionToLedger 
-} from '../lib/arweaveEngine';
 import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
+import { queuePermanentArchive } from '../lib/permanentArchive';
 import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
 import { BackgroundImportProgress, ImportActivitySummary } from './BackgroundImportProgress';
 import { 
@@ -88,6 +84,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [tags, setTags] = useState('Family, Summer, Memories');
   const [people, setPeople] = useState('Wayne, Clara Pendelton');
   const [encryptionLevel, setEncryptionLevel] = useState<'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof'>('Level 5 Protected');
+  const [archivalPassphrase, setArchivalPassphrase] = useState("" );
 
   // AI Auto-Tagging state & Real-time Progress Indicator
   const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
@@ -507,59 +504,32 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     try {
       if (uploadMode === 'single') {
         let storedMediaUrl: string | null = null;
+        let storedMediaId: string | undefined;
+        let archiveJobId: string | undefined;
+        let archiveStatus: MemoryItem["archiveStatus"] = "r2_only";
+        let archiveError: string | undefined;
         if (selectedFile) {
           setArchiveStatusText('Uploading original media to private Cloudflare R2 storage...');
           const stored = await uploadMediaFile(selectedFile, progress => setArchiveProgress(5 + Math.round(progress * 0.25)));
           storedMediaUrl = stored?.mediaUrl || null;
+          storedMediaId = stored?.mediaId;
         }
         setArchiveStatusText('Encrypting single memory payload...');
-        let fileBuffer: ArrayBuffer;
-        let contentType = selectedFile ? selectedFile.type : 'image/jpeg';
-
-        if (selectedFile) {
-          fileBuffer = await selectedFile.arrayBuffer();
-        } else {
-          const textEncoder = new TextEncoder();
-          fileBuffer = textEncoder.encode(description || title);
-        }
+        const contentType = selectedFile ? selectedFile.type : 'image/jpeg';
 
         setArchiveProgress(35);
 
-        if (encryptionLevel !== 'Standard') {
-          const { cipherBuffer } = await encryptData(fileBuffer, '1234');
-          fileBuffer = cipherBuffer;
+        if (selectedFile && storedMediaId && archivalPassphrase.length >= 12) {
+          setArchiveStatusText('Encrypting and queueing permanent archive...');
+          try {
+            const archive = await queuePermanentArchive(selectedFile, archivalPassphrase, value => setArchiveProgress(35 + Math.round(value * 0.55)), storedMediaId);
+            archiveJobId = archive.jobId;
+            archiveStatus = 'queued';
+          } catch (error) {
+            archiveStatus = 'failed';
+            archiveError = error instanceof Error ? error.message : 'Permanent archive queueing failed.';
+          }
         }
-
-        setArchiveStatusText('Generating Arweave block transaction...');
-        const tx = await createPermawebTransaction({
-          data: fileBuffer,
-          contentType,
-          title,
-          category,
-          encryptionLevel
-        });
-
-        setGeneratedTx(tx.id);
-        setCipherHash(tx.dataHash);
-        saveTransactionToLedger(tx);
-
-        setArchiveProgress(65);
-        setArchiveStep(2);
-
-        setArchiveStatusText('Broadcasting to Arweave permaweb gateways...');
-        await fetch('/api/arweave/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title,
-            category,
-            contentType,
-            encryptionLevel,
-            dataHash: tx.dataHash,
-            sizeBytes: tx.sizeBytes
-          })
-        });
-
         setArchiveProgress(90);
         setArchiveStep(3);
 
@@ -580,9 +550,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             imageUrl: finalImg,
             videoUrl: selectedFile?.type.startsWith('video/') ? (storedMediaUrl || undefined) : undefined,
             mediaType: selectedFile?.type.startsWith('video/') ? 'video' : selectedFile?.type === 'application/pdf' ? 'document' : 'photo',
-            description: description || 'Encrypted memory preserved permanently on Arweave permaweb.',
+            description: description || 'Memory stored privately in Aeterna Vault.',
             encryptionLevel,
-            permawebTxId: tx.id,
+            mediaId: storedMediaId,
+            archiveJobId,
+            archiveStatus,
+            archiveError,
             tags: tags.split(',').map(t => t.trim()).filter(Boolean),
             people: peopleArr.length > 0 ? peopleArr : undefined,
             autoTags: aiSuggestions ? {
@@ -617,57 +590,35 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           setArchiveProgress(currentProgress);
           setArchiveStatusText(`Encrypting album item ${idx + 1} of ${totalItems}: ${item.name}...`);
 
-          let fileBuffer: ArrayBuffer;
-          let contentType = item.file ? item.file.type : (item.mimeType || 'image/jpeg');
+          const contentType = item.file ? item.file.type : (item.mimeType || 'image/jpeg');
           let storedMediaUrl = item.storedMediaUrl || item.previewUrl;
+          let storedMediaId = item.mediaId;
+          let archiveJobId: string | undefined;
+          let archiveStatus: MemoryItem["archiveStatus"] = "r2_only";
+          let archiveError: string | undefined;
           if (item.file) {
             setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
             const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)));
             storedMediaUrl = stored?.mediaUrl || item.previewUrl;
+            storedMediaId = stored?.mediaId;
           }
 
-          if (item.file) {
-            fileBuffer = await item.file.arrayBuffer();
-          } else {
-            const textEncoder = new TextEncoder();
-            fileBuffer = textEncoder.encode(description || `${title} - Item ${idx + 1}`);
-          }
 
-          if (encryptionLevel !== 'Standard') {
-            const { cipherBuffer } = await encryptData(fileBuffer, '1234');
-            fileBuffer = cipherBuffer;
-          }
-
-          const itemTitle = totalItems === 1 
-            ? title 
+          const itemTitle = totalItems === 1
+            ? title
             : `${title} (${idx + 1}/${totalItems}) - ${item.name.replace(/\.[^/.]+$/, "")}`;
 
-          const tx = await createPermawebTransaction({
-            data: fileBuffer,
-            contentType,
-            title: itemTitle,
-            category,
-            encryptionLevel
-          });
-
-          if (idx === 0) {
-            setGeneratedTx(tx.id);
-            setCipherHash(tx.dataHash);
+          if (item.file && storedMediaId && archivalPassphrase.length >= 12) {
+            setArchiveStatusText(`Encrypting permanent archive ${idx + 1} of ${totalItems}...`);
+            try {
+              const archive = await queuePermanentArchive(item.file, archivalPassphrase, value => setArchiveProgress(Math.round(((idx + value / 100) / totalItems) * 90)), storedMediaId);
+              archiveJobId = archive.jobId;
+              archiveStatus = 'queued';
+            } catch (error) {
+              archiveStatus = 'failed';
+              archiveError = error instanceof Error ? error.message : 'Permanent archive queueing failed.';
+            }
           }
-          saveTransactionToLedger(tx);
-
-          await fetch('/api/arweave/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: itemTitle,
-              category,
-              contentType,
-              encryptionLevel,
-              dataHash: tx.dataHash,
-              sizeBytes: tx.sizeBytes
-            })
-          });
 
           const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
 
@@ -686,13 +637,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             durationMs: item.durationMs || undefined,
             sourceProvider: item.sourceProvider,
             sourceCreatedAt: item.createdTime || undefined,
-            mediaId: item.mediaId,
+            mediaId: storedMediaId,
             processingStatus: (item.processingStatus || undefined) as MemoryItem['processingStatus'],
             videoUrl: contentType.startsWith('video/') ? storedMediaUrl : undefined,
             mediaType: contentType.startsWith('video/') ? 'video' : contentType === 'application/pdf' ? 'document' : 'photo',
             description: description || `Preserved in Album "${title}" with ${totalItems} total files.`,
             encryptionLevel,
-            permawebTxId: tx.id,
+            archiveJobId,
+            archiveStatus,
+            archiveError,
             tags: [...tags.split(',').map(t => t.trim()).filter(Boolean), 'Album'],
             albumName: title,
             people: peopleArr.length > 0 ? peopleArr : undefined,
@@ -707,7 +660,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         setArchiveStep(3);
         setArchiveProgress(95);
-        setArchiveStatusText(`Album "${title}" successfully sealed into Arweave permaweb!`);
+        setArchiveStatusText(`Album "${title}" saved; eligible encrypted archives are queued for background submission.`);
 
         setTimeout(() => {
           setArchiveProgress(100);
@@ -1427,6 +1380,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
             </div>
 
+            <div className="rounded-2xl border border-[#DFB260]/30 bg-[#120B21] p-3">
+              <label className="block text-[#FFF2A8] font-semibold mb-1">Permanent archive passphrase</label>
+              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="12+ characters; never stored by Aeterna" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
+              <p className="mt-2 text-[10px] text-[#C8B1E4]">Optional. Local files under 10 MB are encrypted in this browser and queued for real Arweave storage. Without it, the file remains private in R2 only.</p>
+            </div>
+
             {cloudActivity.transferring > 0 && (
               <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-amber-100 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -1457,14 +1416,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 <span>
                   {uploadMode === 'album' 
                     ? `Archive Album (${albumFiles.length || 1} ${albumFiles.length === 1 ? 'Item' : 'Items'})` 
-                    : 'Archive Memory to Permaweb'}
+                    : 'Save Memory'}
                 </span>
               </button>
             </div>
           </form>
         </div>
       ) : (
-        /* SCREEN: Overlay "Archiving to Permaweb" Modal */
+        /* SCREEN: Overlay "Saving Memory" Modal */
         <div id="modal-archiving-permaweb" className="cosmic-card-gold max-w-lg w-full p-8 text-center space-y-6 shadow-2xl relative animate-fade-in border border-[#DFB260]">
           
           <div className="w-16 h-16 rounded-2xl bg-[#DFB260]/20 border border-[#DFB260]/40 text-[#FFF2A8] flex items-center justify-center mx-auto">
@@ -1474,20 +1433,20 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <div>
             <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#DFB260]/20 text-[#FFF2A8] border border-[#DFB260]/40 text-[10px] font-mono font-semibold uppercase mb-2">
               <Loader2 className="w-3 h-3 animate-spin text-[#F5D77F]" />
-              <span>Arweave Permaweb Weave In Progress</span>
+              <span>Secure storage in progress</span>
             </div>
             <h3 className="font-cinzel font-bold text-3xl text-[#FFF2A8]">
-              {uploadMode === 'album' ? 'Archiving Album Collection' : 'Archiving to Permaweb'}
+              {uploadMode === 'album' ? 'Saving Album Collection' : 'Saving Memory'}
             </h3>
             <p className="text-xs text-[#C8B1E4]/80 mt-1 font-medium">
-              {archiveStatusText || 'Photos being woven into permanent block history.'}
+              {archiveStatusText || 'Uploading the operational copy and queueing any requested permanent archive.'}
             </p>
           </div>
 
           {/* Animated Progress Bar */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-mono font-semibold">
-              <span className="text-[#C8B1E4]/80 uppercase">Permaweb Sync</span>
+              <span className="text-[#C8B1E4]/80 uppercase">Storage progress</span>
               <span className="text-[#F5D77F]">{archiveProgress}%</span>
             </div>
             <div className="w-full bg-[#120B21] rounded-full h-3.5 p-0.5 border border-[#DFB260]/30 overflow-hidden">
@@ -1502,23 +1461,20 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <div className="bg-[#120B21]/80 p-4 rounded-2xl border border-[#DFB260]/30 text-left text-xs space-y-2.5 font-sans">
             <div className={`flex items-center space-x-2 ${archiveStep >= 1 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <CheckCircle2 className="w-4 h-4 text-[#F5D77F]" />
-              <span>Client-side 256-bit AES encryption handshake complete</span>
+              <span>Private R2 operational upload prepared</span>
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 2 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <HardDrive className="w-4 h-4 text-[#F5D77F]" />
-              <span>{archiveStep >= 2 ? '✓' : '•'} Distributing shards across Arweave permaweb nodes...</span>
+              <span>{archiveStep >= 2 ? '✓' : '•'} Encrypting eligible permanent archive in this browser</span>
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 3 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <ShieldCheck className="w-4 h-4 text-[#F5D77F]" />
-              <span>{archiveStep >= 3 ? '✓' : '⊙'} Final permanence block verification & indexing</span>
+              <span>{archiveStep >= 3 ? '✓' : '⊙'} Background Arweave submission queued; confirmation will appear in the viewer</span>
             </div>
           </div>
 
-          <div className="text-[11px] text-[#FFF2A8] font-mono space-y-1 bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">
-            <div>Arweave Tx ID: <span className="text-[#F5D77F] font-bold">{generatedTx}</span></div>
-            {cipherHash && (
-              <div className="text-[10px] text-[#C8B1E4]/70 truncate">SHA-256 Hash: <span className="font-semibold text-[#FFF2A8]">{cipherHash}</span></div>
-            )}
+          <div className="text-[11px] text-[#FFF2A8] font-mono bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">
+            A real transaction ID appears only after the background worker submits the encrypted archive. Files without an archival passphrase remain private in R2.
           </div>
 
           {archiveProgress < 100 ? (
