@@ -35,3 +35,8 @@ The user must retain the archival passphrase. The database stores salt, IV, KDF 
 ## Normal media uploads
 
 The upload form always preserves the operational original in private R2. For a local file under 10 MB, entering a 12+ character permanent-archive passphrase also creates a browser-encrypted Arweave job linked to the media object. The viewer reads the latest job from PostgreSQL and displays `r2_only`, `queued`, `uploading`, `submitted`, `confirmed`, or `failed`. It never constructs or displays a transaction ID unless the worker has returned one from an accepted Arweave submission.
+
+
+## Immortal Gateway console
+
+The Immortal Gateway view is an authenticated projection of `arweave_storage_jobs`; it contains no generated transactions or demo block data. Gateway links, local decryption, recovered-file downloads, and proof-manifest downloads remain disabled until the selected submitted transaction passes the server dual-gateway ciphertext hash check.

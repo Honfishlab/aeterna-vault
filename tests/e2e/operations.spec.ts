@@ -71,3 +71,20 @@ test("viewer shows database archive state and never invents a transaction", asyn
   await expect(page.getByRole("link",{name:/Open submitted transaction/i})).toHaveCount(0);
   await expect(page.getByText(/ar_9xK2mP1a8f331/i)).toHaveCount(0);
 });
+
+
+test("Immortal Gateway uses verified archive jobs and gates controls", async ({ page }) => {
+  const job={id:"archive-real-1",name:"family.jpg",sizeBytes:2048,payloadHash:"a".repeat(64),encryptionMetadata:{algorithm:"AES-256-GCM"},contentType:"image/jpeg",status:"submitted",transactionId:"2V4PelWO5vYz1uKKfirpnQyGajppmHzXQ6acot42u18",blockHeight:null,confirmations:0,createdAt:new Date().toISOString()};
+  await page.route("**/api/arweave/archive/jobs", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,jobs:[job]})}));
+  await page.route("**/api/arweave/archive/verify/archive-real-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({verified:true,hash:job.payloadHash,size:2048,gateways:[{gateway:"https://arweave.net",verified:true,status:200,hash:job.payloadHash,size:2048},{gateway:"https://secondary.example",verified:true,status:200,hash:job.payloadHash,size:2048}]})}));
+  await page.goto("/#search");
+  await page.getByRole("button",{name:"Immortal Gateway"}).click();
+  await expect(page.getByRole("heading",{name:"Immortal Arweave Archive"})).toBeVisible();
+  await expect(page.getByText(job.transactionId,{exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:/Verify, decrypt and download/i})).toBeDisabled();
+  await page.getByRole("button",{name:/Verify gateways/i}).click();
+  await expect(page.getByText("Ciphertext independently verified.")).toBeVisible();
+  await expect(page.getByRole("button",{name:/Verify, decrypt and download/i})).toBeEnabled();
+  await expect(page.getByRole("link",{name:/Open gateway/i})).toHaveAttribute("href","https://arweave.net/"+job.transactionId);
+  await expect(page.getByText(/SmartWeave|Blockweave Height|verified decentralized suite/i)).toHaveCount(0);
+});

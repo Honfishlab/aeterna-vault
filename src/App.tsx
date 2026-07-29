@@ -28,7 +28,7 @@ import { NotificationProvider } from './components/NotificationSystem';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('landing');
-  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['imports','account','storage','recycle','search','audit'].includes(requested)) setCurrentView(requested); }, []);
+  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['imports','account','storage','recycle','search','audit','immortal'].includes(requested)) setCurrentView(requested); }, []);
   const [searchQuery, setSearchQuery] = useState('');
   
   // User Authentication State
