@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { buildArweaveCollectionHtml } from "../../server/arweaveCollection";
 
 const user = { id:"user-1",name:"Vault Owner",email:"owner@example.com",role:"Vault Owner",authMethod:"Email & Passcode",signedInAt:new Date().toISOString(),securityLevel:"Quantum-Proof AES-GCM" };
 
@@ -74,8 +75,11 @@ test("viewer shows database archive state and never invents a transaction", asyn
 
 
 test("Immortal Gateway uses verified archive jobs and gates controls", async ({ page }) => {
-  const job={id:"archive-real-1",name:"family.jpg",sizeBytes:2048,payloadHash:"a".repeat(64),encryptionMetadata:{algorithm:"AES-256-GCM"},contentType:"image/jpeg",status:"submitted",transactionId:"2V4PelWO5vYz1uKKfirpnQyGajppmHzXQ6acot42u18",blockHeight:null,confirmations:0,createdAt:new Date().toISOString()};
+  const job={id:"archive-real-1",name:"family.jpg",sizeBytes:2048,payloadHash:"a".repeat(64),encryptionMetadata:{algorithm:"AES-256-GCM"},contentType:"image/jpeg",status:"confirmed",transactionId:"2V4PelWO5vYz1uKKfirpnQyGajppmHzXQ6acot42u18",blockHeight:1968802,confirmations:8,createdAt:new Date().toISOString()};
+  let published=false;
   await page.route("**/api/arweave/archive/jobs", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,jobs:[job]})}));
+  await page.route("**/api/arweave/collection", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,viewers:published?[{id:"viewer-1",title:"Family Forever",transactionId:"viewerTx123",itemCount:1,status:"submitted",submittedAt:new Date().toISOString()}]:[]})}));
+  await page.route("**/api/arweave/collection/publish", async route => { expect(route.request().postDataJSON().acknowledgePermanent).toBe(true); published=true; await route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,transactionId:"viewerTx123"})}); });
   await page.route("**/api/arweave/archive/verify/archive-real-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({verified:true,hash:job.payloadHash,size:2048,gateways:[{gateway:"https://arweave.net",verified:true,status:200,hash:job.payloadHash,size:2048},{gateway:"https://secondary.example",verified:true,status:200,hash:job.payloadHash,size:2048}]})}));
   await page.goto("/#search");
   await page.getByRole("button",{name:"Immortal Gateway"}).click();
@@ -86,5 +90,19 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await expect(page.getByText("Ciphertext independently verified.")).toBeVisible();
   await expect(page.getByRole("button",{name:/Verify, decrypt and download/i})).toBeEnabled();
   await expect(page.getByRole("link",{name:/Open gateway/i})).toHaveAttribute("href","https://arweave.net/"+job.transactionId);
+  await page.getByLabel(/I understand the collection title/i).check();
+  await page.getByPlaceholder("Permanent collection title").fill("Family Forever");
+  await page.getByRole("button",{name:/Publish collection to Arweave/i}).click();
+  await expect(page.getByRole("link",{name:/Family Forever/i})).toHaveAttribute("href","https://arweave.net/viewerTx123");
   await expect(page.getByText(/SmartWeave|Blockweave Height|verified decentralized suite/i)).toHaveCount(0);
+});
+
+
+test("standalone collection page references Arweave and never R2", () => {
+  const html=buildArweaveCollectionHtml({title:"Family Forever",createdAt:"2026-07-29T00:00:00.000Z",archives:[{id:"job-1",name:"family.jpg",transactionId:"realTx123",payloadHash:"a".repeat(64),contentType:"image/jpeg",sizeBytes:2048,encryptionMetadata:{algorithm:"AES-256-GCM",kdf:"PBKDF2-SHA256",iterations:310000,iv:"aXY=",salt:"c2FsdA=="}}]});
+  expect(html).toContain("https://arweave.net/");
+  expect(html).toContain("realTx123");
+  expect(html).toContain("PBKDF2");
+  expect(html).not.toContain("/api/media/");
+  expect(html).not.toContain("r2.cloudflarestorage.com");
 });

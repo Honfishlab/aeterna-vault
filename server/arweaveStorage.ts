@@ -68,6 +68,24 @@ export async function uploadEncryptedArchive(input: { data: Uint8Array; jobId: s
   return { transactionId: transaction.id, rewardWinston: String(transaction.reward), owner: await api.wallets.jwkToAddress(jwk) };
 }
 
+export async function uploadArweaveCollectionPage(input: { html: string; collectionId: string; title: string; manifestHash: string; itemCount: number }) {
+  const data = new TextEncoder().encode(input.html);
+  if (data.byteLength > MAX_DIRECT_BYTES) throw new Error("ARWEAVE_COLLECTION_PAGE_TOO_LARGE");
+  const api = await client();
+  const jwk = wallet();
+  const transaction = await api.createTransaction({ data }, jwk);
+  const tags: Array<[string,string]> = [
+    ["App-Name","Aeterna-Vault"], ["App-Version","1"], ["Content-Type","text/html; charset=utf-8"],
+    ["Type","Aeterna-Archive-Collection"], ["Collection-Id",input.collectionId], ["Manifest-SHA256",input.manifestHash],
+    ["Item-Count",String(input.itemCount)], ["Title",input.title.slice(0,100)], ["Schema-Version","1"],
+  ];
+  for (const [name,value] of tags) transaction.addTag(name,value);
+  await api.transactions.sign(transaction,jwk);
+  const response = await api.transactions.post(transaction);
+  if (![200,202].includes(response.status)) throw new Error("ARWEAVE_COLLECTION_POST_" + response.status);
+  return { transactionId:transaction.id,rewardWinston:String(transaction.reward),sizeBytes:data.byteLength };
+}
+
 export async function arweaveTransactionStatus(transactionId: string) {
   const api = await client();
   const status = await api.transactions.getStatus(transactionId);

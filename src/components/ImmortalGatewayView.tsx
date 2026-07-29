@@ -33,6 +33,11 @@ interface Verification {
   gateways?: Array<{ gateway: string; verified: boolean; status: number | null; hash: string | null; size: number | null; error?: string }>;
 }
 
+interface CollectionViewer {
+  id: string; title: string; transactionId: string; itemCount: number;
+  status: "submitted" | "confirmed" | "failed"; blockHeight?: number | null; confirmations?: number; submittedAt: string;
+}
+
 const bytes = (value: number) => value >= 1024 * 1024 ? `${(value / 1024 / 1024).toFixed(2)} MB` : `${Math.ceil(value / 1024)} KB`;
 
 export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
@@ -44,14 +49,22 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const [recovering, setRecovering] = useState(false);
   const [error, setError] = useState("");
   const [verification, setVerification] = useState<Record<string, Verification>>({});
+  const [viewers, setViewers] = useState<CollectionViewer[]>([]);
+  const [collectionTitle, setCollectionTitle] = useState("My Aeterna Permanent Collection");
+  const [acknowledgePermanent, setAcknowledgePermanent] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/arweave/archive/jobs", { cache: "no-store" });
-      const body = await response.json();
+      const [response,collectionResponse] = await Promise.all([
+        fetch("/api/arweave/archive/jobs", { cache: "no-store" }),
+        fetch("/api/arweave/collection", { cache: "no-store" }),
+      ]);
+      const [body,collectionBody] = await Promise.all([response.json(),collectionResponse.json()]);
       if (!response.ok) throw new Error(body.error || "Archive records could not be loaded.");
       setJobs(body.jobs || []);
       setConfigured(Boolean(body.configured));
+      if (collectionResponse.ok) setViewers(collectionBody.viewers || []);
       setSelectedId(current => current || body.jobs?.[0]?.id || "");
       setError("");
     } catch (reason) {
@@ -120,6 +133,17 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const publishCollection = async () => {
+    if (!acknowledgePermanent || !collectionTitle.trim()) return;
+    setPublishing(true); setError("");
+    try {
+      const response=await fetch("/api/arweave/collection/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:collectionTitle,acknowledgePermanent})});
+      const body=await response.json(); if(!response.ok)throw new Error(body.error||"Collection publication failed.");
+      await load();
+    } catch(reason) { setError(reason instanceof Error?reason.message:"Collection publication failed."); }
+    finally { setPublishing(false); }
+  };
+
   return <div className="min-h-screen px-4 py-8 text-[#E8DDF5]">
     <div className="mx-auto max-w-6xl space-y-5">
       <section className="cosmic-card-gold rounded-3xl p-6">
@@ -132,6 +156,14 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Recorded jobs</p><p className="text-[#FFF2A8]">{jobs.length}</p></div>
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Confirmed</p><p className="text-emerald-300">{jobs.filter(job => job.status === "confirmed").length}</p></div>
         </div>
+      </section>
+
+      <section className="cosmic-card-gold rounded-3xl p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#F5D77F]">Arweave-hosted collection</p><h2 className="mt-2 font-cinzel text-2xl text-[#FFF2A8]">Publish a permanent collection viewer</h2><p className="mt-2 max-w-3xl text-xs text-[#C8B1E4]">Creates a standalone HTML gallery transaction on Arweave. It references only confirmed Arweave payloads, fetches no media from R2, verifies every ciphertext hash, and decrypts locally.</p></div><Globe className="h-8 w-8 text-[#F5D77F]"/></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><input value={collectionTitle} onChange={event=>setCollectionTitle(event.target.value)} maxLength={100} className="rounded-xl border border-[#DFB260]/40 bg-[#120B21] p-3 text-sm text-[#FFF2A8]" placeholder="Permanent collection title"/><button onClick={publishCollection} disabled={publishing||!acknowledgePermanent||!jobs.some(job=>job.status==="confirmed")} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-3 text-xs disabled:opacity-30">{publishing?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}Publish collection to Arweave</button></div>
+        <label className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100"><input type="checkbox" checked={acknowledgePermanent} onChange={event=>setAcknowledgePermanent(event.target.checked)} className="mt-0.5"/><span>I understand the collection title, filenames, transaction IDs, MIME types, and encrypted payload metadata will become public and permanent. Passphrases and plaintext are never published.</span></label>
+        {!jobs.some(job=>job.status==="confirmed")&&<p className="mt-3 text-xs text-amber-200">At least one confirmed archive is required before a collection viewer can be published.</p>}
+        {viewers.length>0&&<div className="mt-4 grid gap-2">{viewers.map(viewer=><a key={viewer.id} href={`https://arweave.net/${viewer.transactionId}`} target="_blank" rel="noreferrer" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#DFB260]/30 bg-[#120B21] p-3"><span><strong className="text-[#FFF2A8]">{viewer.title}</strong><span className="ml-2 text-[10px] text-[#C8B1E4]">{viewer.itemCount} items</span></span><span className="flex items-center gap-2 text-xs uppercase text-[#F5D77F]">{viewer.status}<ExternalLink className="h-4 w-4"/></span></a>)}</div>}
       </section>
 
       {error && <div className="flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 p-3 text-sm text-rose-200"><ShieldAlert className="h-4 w-4"/>{error}</div>}

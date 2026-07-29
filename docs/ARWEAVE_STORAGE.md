@@ -40,3 +40,8 @@ The upload form always preserves the operational original in private R2. For a l
 ## Immortal Gateway console
 
 The Immortal Gateway view is an authenticated projection of `arweave_storage_jobs`; it contains no generated transactions or demo block data. Gateway links, local decryption, recovered-file downloads, and proof-manifest downloads remain disabled until the selected submitted transaction passes the server dual-gateway ciphertext hash check.
+
+
+## Arweave-hosted collection viewer
+
+A vault owner can publish a standalone collection viewer from the Immortal Gateway after at least one archive is confirmed. Publication creates a new `text/html` Arweave transaction and records it in `arweave_collection_viewers`. The page embeds a manifest containing only confirmed archive transaction IDs, ciphertext hashes, MIME types, sizes, filenames, and public encryption parameters. It never references R2 or an Aeterna API. Each item is fetched from Arweave, SHA-256 verified, and decrypted with Web Crypto in the visitor browser. Collection publication is permanent and requires explicit acknowledgement that filenames and transaction metadata become public.

@@ -7,7 +7,8 @@ import { acknowledgeImportJobs, cancelImportJob, jobStatus, queueDriveJobs, retr
 import { queueMediaProcessing, startMediaWorker } from "../../../server/mediaProcessing";
 import { accountPost } from "../../../server/accountRoutes";
 import { notifyUser } from "../../../server/notifications";
-import { arweaveConfigured, arweavePrice, arweaveWalletInfo, verifyArweavePayload } from "../../../server/arweaveStorage";
+import { arweaveConfigured, arweavePrice, arweaveTransactionStatus, arweaveWalletInfo, sha256Hex, uploadArweaveCollectionPage, verifyArweavePayload } from "../../../server/arweaveStorage";
+import { buildArweaveCollectionHtml } from "../../../server/arweaveCollection";
 import { startArweaveWorker } from "../../../server/arweaveWorker";
 import { rateLimit } from "../../../server/security";
 
@@ -126,6 +127,16 @@ export async function GET(request: Request) {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     const jobs=await query("SELECT id,original_name AS \"name\",encrypted_size_bytes AS \"sizeBytes\",payload_sha256 AS \"payloadHash\",encryption_metadata AS \"encryptionMetadata\",original_content_type AS \"contentType\",status,transaction_id AS \"transactionId\",reward_winston AS \"rewardWinston\",block_height AS \"blockHeight\",confirmations,error_message AS error,created_at AS \"createdAt\",confirmed_at AS \"confirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",[user.id]);
     return json({configured:arweaveConfigured(),jobs});
+  }
+  if (route === "arweave/collection") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const rows=await query<any>("SELECT id,title,transaction_id AS \"transactionId\",manifest_sha256 AS \"manifestHash\",item_count AS \"itemCount\",status,block_height AS \"blockHeight\",confirmations,error_message AS error,submitted_at AS \"submittedAt\",confirmed_at AS \"confirmedAt\" FROM arweave_collection_viewers WHERE user_id=$1 ORDER BY submitted_at DESC LIMIT 10",[user.id]);
+    const latest=rows[0];
+    if(latest?.status==="submitted"){
+      try{const status=await arweaveTransactionStatus(latest.transactionId);if(status.confirmed){await execute("UPDATE arweave_collection_viewers SET status=$$confirmed$$,block_height=$1,confirmations=$2,confirmed_at=NOW(),updated_at=NOW() WHERE id=$3",[status.blockHeight,status.confirmations,latest.id]);latest.status="confirmed";latest.blockHeight=status.blockHeight;latest.confirmations=status.confirmations;}}
+      catch(error){console.warn("Collection viewer status check failed",error);}
+    }
+    return json({configured:arweaveConfigured(),viewers:rows});
   }
   if (route === "arweave/archive/price") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
@@ -349,7 +360,25 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["arweave/archive/presign", "arweave/archive/complete", "arweave/archive/retry", "notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["arweave/collection/publish", "arweave/archive/presign", "arweave/archive/complete", "arweave/archive/retry", "notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "arweave/collection/publish") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    if(!arweaveConfigured())return json({error:"Arweave service wallet is not configured."},503);
+    if(body.acknowledgePermanent!==true)return json({error:"Confirm that filenames and transaction references will become public and permanent."},400);
+    const title=String(body.title||"Aeterna Permanent Collection").trim().slice(0,100);if(!title)return json({error:"Collection title is required."},400);
+    const archives=await query<any>("SELECT id,original_name AS name,transaction_id AS \"transactionId\",payload_sha256 AS \"payloadHash\",original_content_type AS \"contentType\",encrypted_size_bytes AS \"sizeBytes\",encryption_metadata AS \"encryptionMetadata\" FROM arweave_storage_jobs WHERE user_id=$1 AND status=$$confirmed$$ AND transaction_id IS NOT NULL ORDER BY confirmed_at,created_at LIMIT 200",[user.id]);
+    if(!archives.length)return json({error:"At least one confirmed Arweave archive is required."},409);
+    try{
+      const id=crypto.randomUUID(),createdAt=new Date().toISOString();
+      const html=buildArweaveCollectionHtml({title,createdAt,archives});
+      const manifestHash=sha256Hex(new TextEncoder().encode(JSON.stringify({schema:1,title,createdAt,archives})));
+      const result=await uploadArweaveCollectionPage({html,collectionId:id,title,manifestHash,itemCount:archives.length});
+      await execute("INSERT INTO arweave_collection_viewers(id,user_id,title,transaction_id,manifest_sha256,item_count) VALUES($1,$2,$3,$4,$5,$6)",[id,user.id,title,result.transactionId,manifestHash,archives.length]);
+      await notifyUser(user.id,"info","Arweave collection submitted",title+" was submitted and is awaiting confirmation.",{actionView:"immortal",entityType:"arweave_collection_viewer",entityId:id});
+      return json({success:true,id,transactionId:result.transactionId,status:"submitted",itemCount:archives.length,url:"https://arweave.net/"+result.transactionId});
+    }catch(error:any){console.error("Arweave collection publication failed",error);return json({error:error?.message||"Collection publication failed."},502);}
+  }
 
   if (route === "arweave/archive/presign") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
