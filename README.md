@@ -90,3 +90,18 @@ Run the automated browser tests with:
 `npm run test:e2e`
 
 The Playwright suite mocks provider history responses and verifies completed, processing, filtering, and failure states without accessing a real Google account or production vault.
+
+
+### Account security and recovery operations
+
+Set `RESEND_API_KEY` and `EMAIL_FROM` on the web service to enable verification and password-reset delivery. Set `IMPORT_EMAIL_NOTIFICATIONS=true` to email users when a long-running video transfer completes and playback optimization begins. Tokens are single-use, stored only as SHA-256 hashes, and expire after 24 hours for verification or one hour for password recovery. Login, registration, and recovery endpoints use database-backed IP rate limits.
+
+Storage is enforced before direct uploads and again inside the cloud-import worker. Existing accounts default to the `starter` plan with a 5 GB allowance; administrators may update `users.plan_code` and `users.storage_quota_bytes` after a billing entitlement change.
+
+Operational recovery checklist:
+
+1. Keep Render PostgreSQL point-in-time recovery enabled and record its retention window.
+2. Enable Cloudflare R2 object versioning or replication and define lifecycle rules separately from the application recycle bin.
+3. Test a PostgreSQL restore and a representative R2 media recovery quarterly.
+4. Rotate session, provider-token, import-worker, OAuth, R2, and email secrets after staff changes or suspected exposure.
+5. Export and review `audit_events` for account deletion, password changes, session revocation, provider changes, and import-session actions.

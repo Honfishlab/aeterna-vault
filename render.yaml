@@ -34,6 +34,12 @@ services:
         sync: false
       - key: IMPORT_WORKER_SECRET
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: IMPORT_EMAIL_NOTIFICATIONS
+        value: "false"
 
   - type: worker
     name: aeterna-vault-import-worker

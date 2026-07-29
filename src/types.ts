@@ -12,6 +12,7 @@ export type ViewMode =
   | 'imports'
   | 'recycle'
   | 'storage'
+  | 'account'
   | 'audit';
 
 export interface Heir {

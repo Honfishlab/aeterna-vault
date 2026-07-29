@@ -27,7 +27,8 @@ import {
   Download,
   History,
   Trash2,
-  HardDrive
+  HardDrive,
+  Settings
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -67,6 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'imports', label: 'Imports', icon: History },
     { id: 'recycle', label: 'Recycle Bin', icon: Trash2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
+    { id: 'account', label: 'Account', icon: Settings },
     { id: 'immortal', label: 'Immortal Gateway', icon: Globe },
     { id: 'inheritance', label: 'Inheritance Protocol', icon: Users },
     { id: 'legacy', label: 'Time Capsule', icon: BookOpen },

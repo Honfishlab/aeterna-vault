@@ -97,6 +97,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!email) { setAuthError("Enter your email address first."); return; }
+    const response = await fetch("/api/auth/request-reset",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})});
+    const result = await response.json(); setAuthError(result.message||result.error);
+  };
+
   const handleWeb3SignIn = () => {
     setAuthError("Web3 sign-in is not enabled yet. Use email and password for a verified account.");
   };
@@ -349,6 +355,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       required
                     />
                   </div>
+                  {authType === "signin" && <button type="button" onClick={handlePasswordReset} className="text-[10px] text-[#F5D77F] mt-2">Forgot password? Send reset email</button>}
                 </div>
 
                 <div>

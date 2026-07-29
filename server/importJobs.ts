@@ -2,6 +2,7 @@ import { execute, query } from "./db";
 import { googleAccess } from "./googleDrive";
 import { mediaTypeAllowed, r2Bucket, r2Modules, safeObjectName } from "./r2";
 import { processNextMediaJob, queueMediaProcessing } from "./mediaProcessing";
+import { sendAccountEmail } from "./security";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const MAX_BYTES = 5 * 1024 * 1024 * 1024;
@@ -197,6 +198,8 @@ export async function processNextImportJob() {
     const responseBytes = Number(download.headers.get("content-length") || 0);
     const total = rangeTotal || Number(job.bytes_total || 0) || resumeOffset + responseBytes;
     if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_5_GB");
+    const quota = await query<any>("SELECT u.storage_quota_bytes AS quota,COALESCE(SUM(m.size_bytes) FILTER (WHERE m.deleted_at IS NULL),0)::bigint AS used FROM users u LEFT JOIN media_objects m ON m.user_id=u.id WHERE u.id=$1 GROUP BY u.storage_quota_bytes", [job.user_id]);
+    if (Number(quota[0]?.used || 0) + total > Number(quota[0]?.quota || 5368709120)) throw new Error("STORAGE_QUOTA_EXCEEDED");
     await execute("UPDATE media_import_jobs SET bytes_total=$1,updated_at=NOW() WHERE id=$2", [total, job.id]);
     const existingObjects = await query<{ id: string; object_key: string; status: string; size_bytes: string }>("SELECT id,object_key,status,size_bytes FROM media_objects WHERE user_id=$1 AND source_provider=$2 AND source_id=$3 LIMIT 1", [job.user_id, payload.provider, job.provider_file_id]);
     const existingObject = existingObjects[0];
@@ -220,16 +223,23 @@ export async function processNextImportJob() {
     const thumbnailKey = await persistVideoThumbnail(payload, auth.token, job.user_id, mediaId).catch(() => null);
     await execute("UPDATE media_objects SET status=$$ready$$,etag=$1,size_bytes=CASE WHEN size_bytes>0 THEN size_bytes ELSE $2 END,thumbnail_object_key=COALESCE($3,thumbnail_object_key),completed_at=NOW() WHERE id=$4", [result.ETag, result.bytes || total, thumbnailKey, mediaId]);
     await execute("UPDATE media_import_jobs SET status=$$complete$$,media_object_id=$1,progress=100,bytes_total=$2,bytes_transferred=$2,resume_offset=$2,completed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3", [mediaId, result.bytes || total, job.id]);
-    if (mimeType.startsWith("video/")) await queueMediaProcessing(job.user_id, mediaId);
+    if (mimeType.startsWith("video/")) {
+      await queueMediaProcessing(job.user_id, mediaId);
+      if (process.env.IMPORT_EMAIL_NOTIFICATIONS === "true" && job.started_at && Date.now()-new Date(job.started_at).getTime()>120000) {
+        const account = await query<any>("SELECT email FROM users WHERE id=$1",[job.user_id]);
+        if (account[0]?.email) await sendAccountEmail(account[0].email,"Aeterna Vault video transfer complete",` finished transferring and is being optimized for playback.`).catch(()=>false);
+      }
+    }
     return { id: job.id, status: "complete" };
   } catch (error: any) {
     const state = await query<{ status: string }>("SELECT status FROM media_import_jobs WHERE id=$1", [job.id]);
     const cancelled = state[0]?.status === "cancel_requested";
     const expired = error?.message === "PHOTOS_SELECTION_EXPIRED";
     const videoNotReady = String(error?.message || "").startsWith("GOOGLE_VIDEO_NOT_READY_");
-    const retry = !cancelled && !expired && !videoNotReady && Number(job.attempts || 0) < 3;
+    const quotaExceeded = error?.message === "STORAGE_QUOTA_EXCEEDED";
+    const retry = !cancelled && !expired && !videoNotReady && !quotaExceeded && Number(job.attempts || 0) < 3;
     const status = cancelled ? "cancelled" : retry ? "queued" : "failed";
-    const message = expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
+    const message = quotaExceeded ? "Storage quota exceeded. Free space or upgrade, then retry." : expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
     await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,next_attempt_at=NOW()+($3*INTERVAL $$1 second$$),updated_at=NOW() WHERE id=$4", [status, message, Math.min(300, 15 * 2 ** Number(job.attempts || 0)), job.id]);
     return { id: job.id, status };
   }

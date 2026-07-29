@@ -5,6 +5,8 @@ import { completeGoogleAuthorization, createGoogleAuthorization, disconnectGoogl
 import { createPhotosSession, pollPhotosSession, queuePhotosItems } from "../../../server/googlePhotos";
 import { acknowledgeImportJobs, cancelImportJob, jobStatus, queueDriveJobs, retryImportJob, startImportWorker } from "../../../server/importJobs";
 import { queueMediaProcessing } from "../../../server/mediaProcessing";
+import { accountPost } from "../../../server/accountRoutes";
+import { rateLimit } from "../../../server/security";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -139,7 +141,26 @@ export async function GET(request: Request) {
     const albums = await query("SELECT COALESCE(j.album_name,$$Unassigned$$) AS \"albumName\",COUNT(*)::integer AS count,COALESCE(SUM(m.size_bytes),0)::bigint AS bytes FROM media_objects m LEFT JOIN LATERAL (SELECT album_name FROM media_import_jobs WHERE media_object_id=m.id AND album_name IS NOT NULL ORDER BY created_at DESC LIMIT 1) j ON TRUE WHERE m.user_id=$1 AND m.deleted_at IS NULL GROUP BY COALESCE(j.album_name,$$Unassigned$$) ORDER BY bytes DESC LIMIT 25", [user.id]);
     const total = totals[0] || {};
     const billableBytes = Number(total.activeBytes || 0) + Number(total.trashBytes || 0);
-    return json({ totals: total, albums, estimatedMonthlyStorageUsd: Number((billableBytes / 1024 ** 3 * Number(process.env.R2_STORAGE_COST_PER_GB || 0.015)).toFixed(2)), estimateOnly: true });
+    const account = await query<any>("SELECT plan_code AS plan,storage_quota_bytes AS \"quotaBytes\" FROM users WHERE id=$1", [user.id]);
+    return json({ totals: total, albums, plan: account[0]?.plan || "starter", quotaBytes: Number(account[0]?.quotaBytes || 5368709120), estimatedMonthlyStorageUsd: Number((billableBytes / 1024 ** 3 * Number(process.env.R2_STORAGE_COST_PER_GB || 0.015)).toFixed(2)), estimateOnly: true });
+  }
+
+  if (route === "account") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const account = await query<any>("SELECT id,name,email,role,plan_code AS plan,storage_quota_bytes AS \"quotaBytes\",email_verified_at AS \"emailVerifiedAt\",created_at AS \"createdAt\" FROM users WHERE id=$1", [user.id]);
+    const sessions = await query("SELECT id,user_agent AS \"userAgent\",ip_address AS \"ipAddress\",created_at AS \"createdAt\",last_seen_at AS \"lastSeenAt\",expires_at AS \"expiresAt\" FROM sessions WHERE user_id=$1 AND expires_at>NOW() ORDER BY last_seen_at DESC", [user.id]);
+    const providers = await query("SELECT provider,account_email AS email,created_at AS \"connectedAt\" FROM media_provider_connections WHERE user_id=$1 AND status=$$active$$", [user.id]);
+    return json({ account: account[0], sessions, providers });
+  }
+
+  if (route === "account/export") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const snapshot = await query<any>("SELECT data,revision,updated_at AS \"updatedAt\" FROM vault_snapshots WHERE user_id=$1", [user.id]);
+    const media = await query("SELECT id,original_name AS name,content_type AS \"contentType\",size_bytes AS size,source_provider AS provider,created_at AS \"createdAt\" FROM media_objects WHERE user_id=$1 AND deleted_at IS NULL", [user.id]);
+    await execute("INSERT INTO audit_events(user_id,event_type,entity_type) VALUES($1,$2,$3)", [user.id,"account.exported","user"]);
+    return json({ exportedAt: new Date().toISOString(), user, vault: snapshot[0] || null, media });
   }
 
   if (route.startsWith("integrations/google-photos/session/")) {
@@ -282,13 +303,29 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["auth/register", "auth/login", "auth/logout", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  const accountResponse = await accountPost(route, request, body);
+  if (accountResponse) return accountResponse;
 
   if (route === "import-jobs/acknowledge") {
     const user = await authenticatedUser(request);
     if (!user) return json({ error: "Authentication required." }, 401);
     await acknowledgeImportJobs(user.id, Array.isArray(body.ids) ? body.ids : []);
     return json({ success: true });
+  }
+
+  if (route === "import-jobs/session-action") {
+    const user = await authenticatedUser(request);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const albumName = String(body.albumName || "").slice(0,200);
+    const action = String(body.action || "");
+    if (!albumName || !["retry","cancel","resume"].includes(action)) return json({ error: "Invalid import-session action." }, 400);
+    let result: any[] = [];
+    if (action === "cancel") result = await query("UPDATE media_import_jobs SET status=CASE WHEN status=$$queued$$ THEN $$cancelled$$ ELSE $$cancel_requested$$ END,updated_at=NOW() WHERE user_id=$1 AND album_name=$2 AND status IN ($$queued$$,$$transferring$$) RETURNING id", [user.id, albumName]);
+    else result = await query("UPDATE media_import_jobs SET status=$$queued$$,attempts=0,error_message=NULL,next_attempt_at=NOW(),updated_at=NOW() WHERE user_id=$1 AND album_name=$2 AND status IN ($$failed$$,$$cancelled$$) RETURNING id", [user.id, albumName]);
+    await execute("INSERT INTO audit_events(user_id,event_type,entity_type,metadata) VALUES($1,$2,$3,$4::jsonb)", [user.id,"import.session_"+action,"media_import_job",JSON.stringify({ albumName,count: result.length })]);
+    return json({ success: true, count: result.length });
   }
 
   if (route === "import-jobs/cancel" || route === "import-jobs/retry") {
@@ -375,6 +412,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     await execute("INSERT INTO deleted_albums(id,user_id,album_name,item_snapshot,media_ids) VALUES($1,$2,$3,$4::jsonb,$5::text[])", [id, user.id, albumName, JSON.stringify(items), mediaIds]);
     if (mediaIds.length) await execute("UPDATE media_objects SET deleted_at=NOW(),purge_after=NOW()+INTERVAL $$30 days$$ WHERE user_id=$1 AND id=ANY($2::text[]) AND deleted_at IS NULL", [user.id, mediaIds]);
+    await execute("INSERT INTO audit_events(user_id,event_type,entity_type,entity_id,metadata) VALUES($1,$2,$3,$4,$5::jsonb)",[user.id,"album.trashed","album",id,JSON.stringify({albumName,itemCount:items.length})]);
     return json({ success: true, id, purgeAfterDays: 30 });
   }
 
@@ -387,10 +425,12 @@ export async function POST(request: Request) {
     if (route === "media/restore-album") {
       if (rows[0].mediaIds?.length) await execute("UPDATE media_objects SET deleted_at=NULL,purge_after=NULL WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, rows[0].mediaIds]);
       await execute("UPDATE deleted_albums SET restored_at=NOW() WHERE id=$1 AND user_id=$2", [id, user.id]);
+      await execute("INSERT INTO audit_events(user_id,event_type,entity_type,entity_id) VALUES($1,$2,$3,$4)",[user.id,"album.restored","album",id]);
       return json({ success: true, items: rows[0].items || [] });
     }
     if (rows[0].mediaIds?.length) await execute("UPDATE media_objects SET purge_after=NOW() WHERE user_id=$1 AND id=ANY($2::text[])", [user.id, rows[0].mediaIds]);
     await execute("UPDATE deleted_albums SET permanently_deleted_at=NOW() WHERE id=$1 AND user_id=$2", [id, user.id]);
+    await execute("INSERT INTO audit_events(user_id,event_type,entity_type,entity_id) VALUES($1,$2,$3,$4)",[user.id,"album.purged","album",id]);
     return json({ success: true });
   }
 
@@ -403,6 +443,8 @@ export async function POST(request: Request) {
       const contentType = String(body.contentType || "").toLowerCase();
       const size = Number(body.size || 0);
       if (!name || !mediaTypeAllowed(contentType) || !Number.isSafeInteger(size) || size < 1 || size > 100 * 1024 * 1024) return json({ error: "Unsupported media type or file size. Maximum size is 100 MB." }, 400);
+      const quota = await query<any>("SELECT u.storage_quota_bytes AS quota,COALESCE(SUM(m.size_bytes) FILTER (WHERE m.deleted_at IS NULL),0)::bigint AS used FROM users u LEFT JOIN media_objects m ON m.user_id=u.id WHERE u.id=$1 GROUP BY u.storage_quota_bytes", [user.id]);
+      if (Number(quota[0]?.used || 0) + size > Number(quota[0]?.quota || 5368709120)) return json({ error: "This upload would exceed your storage plan. Remove media or upgrade your storage allowance.", code: "STORAGE_QUOTA_EXCEEDED", usedBytes: Number(quota[0]?.used || 0), quotaBytes: Number(quota[0]?.quota || 5368709120) }, 413);
       const mediaId = crypto.randomUUID();
       const objectKey = user.id + "/" + mediaId + "-" + safeObjectName(name);
       const { client, PutObjectCommand, getSignedUrl } = await r2Modules();
@@ -430,6 +472,7 @@ export async function POST(request: Request) {
   }
 
   if (route === "auth/register") {
+    if (!(await rateLimit(request,"register",5,60))) return json({ error: "Too many registration attempts. Try again later." },429);
     if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
     const email = normalizeEmail(String(body.email || ""));
     const password = String(body.password || "");
@@ -450,6 +493,7 @@ export async function POST(request: Request) {
   }
 
   if (route === "auth/login") {
+    if (!(await rateLimit(request,"login",10,15))) return json({ error: "Too many login attempts. Try again in 15 minutes." },429);
     if (!databaseConfigured()) return json(databaseError(new Error("DATABASE_NOT_CONFIGURED")), 503);
     const email = normalizeEmail(String(body.email || ""));
     const password = String(body.password || "");

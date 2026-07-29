@@ -17,6 +17,7 @@ import { AuditView } from './components/AuditView';
 import { ImportHistoryView } from './components/ImportHistoryView';
 import { RecycleBinView } from './components/RecycleBinView';
 import { StorageManagementView } from './components/StorageManagementView';
+import { AccountManagementView } from './components/AccountManagementView';
 import { UploadModal } from './components/UploadModal';
 import { VideoRecorderModal } from './components/VideoRecorderModal';
 import { WalletModal } from './components/WalletModal';
@@ -586,6 +587,8 @@ export default function App() {
         {currentView === 'recycle' && <RecycleBinView onRestore={(items) => handleUpdateMemoriesList([...memories, ...items.filter(item => !memories.some(existing => existing.id === item.id))])} />}
 
         {currentView === 'storage' && <StorageManagementView onOpenRecycle={() => setCurrentView('recycle')} />}
+
+        {currentView === 'account' && <AccountManagementView onSignedOut={() => { setCurrentUser(null); localStorage.removeItem('aeterna_user_profile'); setCurrentView('landing'); }} />}
 
         {currentView === 'audit' && (
           <AuditView

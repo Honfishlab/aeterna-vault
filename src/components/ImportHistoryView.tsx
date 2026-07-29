@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNotifications } from "./NotificationSystem";
 import { CheckCircle2, Clock3, CloudDownload, Film, Loader2, RefreshCw, XCircle } from "lucide-react";
 
 interface HistoryJob {
@@ -24,6 +25,17 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const { addNotification } = useNotifications();
+  const notifiedSessions = useRef(new Set<string>());
+  const [acting,setActing] = useState<string | null>(null);
+
+  const sessionAction = async (albumName: string, action: "retry"|"cancel"|"resume") => {
+    setActing(albumName+action);
+    const response = await fetch("/api/import-jobs/session-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({albumName,action})});
+    const result = await response.json();
+    addNotification({type:response.ok?"success":"error",title:response.ok?"Import session updated":"Import action failed",message:response.ok?` items updated in .`:result.error||"Please try again."});
+    setActing(null); await load();
+  };
 
   const load = async () => {
     setLoading(true);
@@ -57,6 +69,15 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
     return { ...session, active, processing, failed, complete, status: active ? "Importing" : processing ? "Optimizing video" : failed ? "Complete with issues" : "Complete" };
   }), [jobs]);
 
+  useEffect(() => {
+    sessions.forEach(session => {
+      if ((session.status === "Complete" || session.status === "Complete with issues") && !notifiedSessions.current.has(session.albumName)) {
+        notifiedSessions.current.add(session.albumName);
+        addNotification({ type: session.failed ? "warning" : "success", title: session.failed ? "Import finished with issues" : "Import complete", message: `:  items ready.`, duration: 9000 });
+      }
+    });
+  }, [sessions,addNotification]);
+
   return (
     <section className="space-y-6 pb-16">
       <div className="cosmic-card p-6 sm:p-8 rounded-3xl">
@@ -80,7 +101,7 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
           <div className="flex justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest text-[#F5D77F]">Import session</p><h2 className="font-cinzel text-lg text-[#FFF2A8] font-bold mt-1">{session.albumName}</h2></div><span className={`h-fit px-2.5 py-1 rounded-full text-[10px] ${session.failed ? "bg-rose-500/20 text-rose-200" : session.active || session.processing ? "bg-amber-400/20 text-[#FFF2A8]" : "bg-emerald-500/20 text-emerald-200"}`}>{session.status}</span></div>
           <div className="h-2 rounded-full bg-black/40 overflow-hidden mt-4"><div className="h-full bg-gradient-to-r from-[#B77A2D] to-[#FFF2A8]" style={{ width: `${Math.round(session.complete / Math.max(1,session.jobs.length) * 100)}%` }} /></div>
           <p className="text-xs text-[#C8B1E4] mt-2">{session.complete} of {session.jobs.length} ready{session.failed ? ` · ${session.failed} need attention` : ""}</p>
-          {onOpenAlbum && session.albumName !== "Unassigned import" && <button onClick={() => onOpenAlbum(session.albumName)} className="text-xs text-[#F5D77F] mt-4">Open album →</button>}
+          <div className="flex flex-wrap gap-3 mt-4">{onOpenAlbum && session.albumName !== "Unassigned import" && <button onClick={() => onOpenAlbum(session.albumName)} className="text-xs text-[#F5D77F]">Open album →</button>}{session.failed>0&&<button disabled={acting!==null} onClick={()=>sessionAction(session.albumName,"retry")} className="text-xs text-amber-200">Retry items</button>}{session.active>0&&<button disabled={acting!==null} onClick={()=>sessionAction(session.albumName,"cancel")} className="text-xs text-rose-300">Cancel session</button>}{!session.active&&session.jobs.some(job=>job.status==="cancelled")&&<button disabled={acting!==null} onClick={()=>sessionAction(session.albumName,"resume")} className="text-xs text-emerald-200">Resume</button>}</div>
         </article>)}
       </div>
 
