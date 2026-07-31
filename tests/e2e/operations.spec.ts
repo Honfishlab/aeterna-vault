@@ -15,6 +15,9 @@ test("moves legacy destinations into a left rail on narrower desktop screens", a
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
   await expect(page.locator("#side-nav-legacy")).toBeVisible();
   await expect(page.locator("#side-nav-locker")).toBeVisible();
+  const railBox=await page.getByRole("navigation",{name:"Legacy sections"}).boundingBox();
+  expect(railBox?.y).toBeGreaterThan(250);
+  expect(railBox?.y).toBeLessThan(450);
   await expect(page.locator("#nav-link-memorials")).toBeHidden();
   await page.setViewportSize({width:1800,height:900});
   await expect(page.locator("#side-nav-memorials")).toBeHidden();

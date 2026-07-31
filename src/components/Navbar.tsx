@@ -81,6 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const sideNavItems = navItems.filter(item => sideNavIds.has(item.id));
 
   return (
+    <>
     <header id="main-header" className="sticky top-0 z-40 bg-[#120B21]/95 backdrop-blur-xl border-b border-[#DFB260]/30 text-[#E8DDF5]">
       <div className="w-full max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex items-center justify-between h-20 sm:h-24">
@@ -134,14 +135,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   aria-label={item.label}
                   title={item.label}
                   onClick={() => onSelectView(item.id)}
-                  className={`${isSideItem ? 'hidden min-[1750px]:flex' : 'flex'} items-center space-x-1.5 px-2 min-[1750px]:px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+                  className={`${isSideItem ? 'hidden min-[1750px]:flex' : 'flex'} items-center space-x-1.5 px-2 min-[1400px]:px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                     isActive
                       ? 'bg-gradient-to-r from-[#DFB260]/20 to-[#7353A0]/30 text-[#FFF2A8] border border-[#DFB260]/50 shadow-[0_0_12px_rgba(223,178,96,0.2)]'
                       : 'text-[#C8B1E4]/80 hover:text-[#FFF2A8] hover:bg-[#1A0C33]/60'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]/70'}`} />
-                  <span className="hidden min-[1750px]:inline font-sans">{item.label}</span>
+                  <span className="hidden min-[1400px]:inline font-sans">{item.label}</span>
                 </button>
               );
             })}
@@ -261,6 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </div>
       </div>
+    </header>
       <nav aria-label="Legacy sections" className="hidden md:flex min-[1750px]:!hidden fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
         <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Legacy</p>
         {sideNavItems.map(item => {
@@ -271,6 +273,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>;
         })}
       </nav>
-    </header>
+    </>
   );
 };
