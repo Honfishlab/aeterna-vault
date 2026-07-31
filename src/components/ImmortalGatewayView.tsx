@@ -67,6 +67,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const [collectionTitle, setCollectionTitle] = useState("My Aeterna Permanent Collection");
   const [acknowledgePermanent, setAcknowledgePermanent] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [publishingAll, setPublishingAll] = useState(false);
   const [albums, setAlbums] = useState<AlbumReadiness[]>([]);
   const [selectedAlbumName, setSelectedAlbumName] = useState("");
   const [albumPassphrase, setAlbumPassphrase] = useState("");
@@ -155,6 +156,21 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const allFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName), [viewers]);
+
+  const publishAllFilesViewer = async () => {
+    const confirmedCount=jobs.filter(job=>job.status==="confirmed").length;
+    if(!confirmedCount)return;
+    if(!window.confirm(`Publish an independent Arweave viewer containing all ${confirmedCount} confirmed permanent archives? The viewer and its public metadata cannot be removed.`))return;
+    setPublishingAll(true);setError("");
+    try{
+      const response=await fetch("/api/arweave/collection/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:"Aeterna — All Permanent Archives",scope:"all",acknowledgePermanent:true})});
+      const body=await response.json();if(!response.ok)throw new Error(body.error||"All-files viewer publication failed.");
+      await load();
+    }catch(reason){setError(reason instanceof Error?reason.message:"All-files viewer publication failed.");}
+    finally{setPublishingAll(false);}
+  };
+
   const selectedAlbum = useMemo(() => albums.find(album => album.albumName === selectedAlbumName), [albums, selectedAlbumName]);
   const albumReady = Boolean(selectedAlbum && selectedAlbum.itemCount > 0 && selectedAlbum.confirmedCount === selectedAlbum.itemCount);
 
@@ -210,7 +226,11 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
       <section className="cosmic-card-gold rounded-3xl p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#F5D77F]">Verified permanent storage</p><h1 className="mt-2 font-cinzel text-3xl font-bold text-[#FFF2A8]">Immortal Arweave Archive</h1><p className="mt-2 max-w-3xl text-sm text-[#C8B1E4]">Only authenticated archive jobs recorded by Aeterna appear here. No transaction, block, gateway, or confirmation values are simulated.</p></div>
-          <button onClick={() => void load()} disabled={loading} className="gold-beveled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40"><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}/>Refresh records</button>
+          <div className="flex flex-wrap gap-2">
+            {allFilesViewer?<a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs"><Globe className="h-4 w-4"/>Open Independent Arweave Viewer<ExternalLink className="h-3.5 w-3.5"/></a>:<button onClick={publishAllFilesViewer} disabled={publishingAll||!jobs.some(job=>job.status==="confirmed")} className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-30">{publishingAll?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}Publish All-Files Viewer</button>}
+            <button onClick={() => void load()} disabled={loading} className="gold-beveled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40"><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}/>Refresh records</button>
+          </div>
+
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Service wallet</p><p className={configured ? "text-emerald-300" : "text-amber-200"}>{configured ? "Configured" : "Not configured"}</p></div>
