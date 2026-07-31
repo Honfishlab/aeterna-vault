@@ -153,10 +153,18 @@ export async function GET(request: Request) {
   if (route === "arweave/collection") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     const rows=await query<any>("SELECT id,title,album_name AS \"albumName\",transaction_id AS \"transactionId\",manifest_sha256 AS \"manifestHash\",item_count AS \"itemCount\",status,block_height AS \"blockHeight\",confirmations,error_message AS error,submitted_at AS \"submittedAt\",confirmed_at AS \"confirmedAt\" FROM arweave_collection_viewers WHERE user_id=$1 ORDER BY submitted_at DESC LIMIT 20",[user.id]);
-    const latest=rows[0];
-    if(latest?.status==="submitted"){
-      try{const status=await arweaveTransactionStatus(latest.transactionId);if(status.confirmed){await execute("UPDATE arweave_collection_viewers SET status=$$confirmed$$,block_height=$1,confirmations=$2,confirmed_at=NOW(),updated_at=NOW() WHERE id=$3",[status.blockHeight,status.confirmations,latest.id]);latest.status="confirmed";latest.blockHeight=status.blockHeight;latest.confirmations=status.confirmations;}}
-      catch(error){console.warn("Collection viewer status check failed",error);}
+    for (const viewer of rows.filter((row:any)=>row.status==="submitted")) {
+      try {
+        const status=await arweaveTransactionStatus(viewer.transactionId);
+        if(status.confirmed){
+          await execute("UPDATE arweave_collection_viewers SET status=$$confirmed$$,block_height=$1,confirmations=$2,confirmed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3",[status.blockHeight,status.confirmations,viewer.id]);
+          viewer.status="confirmed";viewer.blockHeight=status.blockHeight;viewer.confirmations=status.confirmations;
+        } else if(status.status===404 && Date.now()-new Date(viewer.submittedAt).getTime()>10*60*1000) {
+          const message="Transaction was not found on Arweave after 10 minutes. Publish a replacement viewer.";
+          await execute("UPDATE arweave_collection_viewers SET status=$$failed$$,error_message=$1,updated_at=NOW() WHERE id=$2",[message,viewer.id]);
+          viewer.status="failed";viewer.error=message;
+        }
+      } catch(error){console.warn("Collection viewer status check failed",error);}
     }
     return json({configured:arweaveConfigured(),viewers:rows});
   }

@@ -117,7 +117,8 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.getByLabel(/I understand the collection title/i).check();
   await page.getByPlaceholder("Permanent collection title").fill("Family Forever");
   await page.getByRole("button",{name:/Publish album viewer to Arweave/i}).click();
-  await expect(page.getByRole("link",{name:/Family Forever/i})).toHaveAttribute("href","https://arweave.net/viewerTx123");
+  await expect(page.getByText("Family Forever",{exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:/Family Forever/i})).toHaveCount(0);
   await expect(page.getByText(/SmartWeave|Blockweave Height|verified decentralized suite/i)).toHaveCount(0);
 });
 
