@@ -97,13 +97,15 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.route("**/api/arweave/archive/jobs", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,jobs:[job]})}));
   await page.route("**/api/arweave/albums", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,albums:[{albumName:"Family Album",itemCount:1,totalBytes:2048,confirmedCount:1,pendingCount:0,failedCount:0,eligibleCount:0,ineligibleCount:0,items:[{memoryId:"memory-1",mediaId:"media-1",name:"family.jpg",contentType:"image/jpeg",sizeBytes:2048,mediaStatus:"ready",archiveStatus:"confirmed",transactionId:job.transactionId}]}]})}));
   await page.route("**/api/arweave/archive/price?**", route => route.fulfill({contentType:"application/json",body:JSON.stringify({ar:"0.00001",winston:"10000000"})}));
-  await page.route("**/api/arweave/collection", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,viewers:[{id:"viewer-all",title:"All Permanent Archives",albumName:null,transactionId:"allViewerTx",itemCount:1,status:"confirmed",submittedAt:new Date().toISOString()},...(published?[{id:"viewer-1",title:"Family Forever",albumName:"Family Album",transactionId:"viewerTx123",itemCount:1,status:"submitted",submittedAt:new Date().toISOString()}]:[])]})}));
+  await page.route("**/api/arweave/collection", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,viewers:[{id:"viewer-all",title:"All Permanent Archives",albumName:null,transactionId:"allViewerTx",itemCount:0,status:"confirmed",submittedAt:new Date().toISOString()},...(published?[{id:"viewer-1",title:"Family Forever",albumName:"Family Album",transactionId:"viewerTx123",itemCount:1,status:"submitted",submittedAt:new Date().toISOString()}]:[])]})}));
   await page.route("**/api/arweave/collection/publish", async route => { expect(route.request().postDataJSON()).toMatchObject({acknowledgePermanent:true,albumName:"Family Album"}); published=true; await route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,transactionId:"viewerTx123"})}); });
   await page.route("**/api/arweave/archive/verify/archive-real-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({verified:true,hash:job.payloadHash,size:2048,gateways:[{gateway:"https://arweave.net",verified:true,status:200,hash:job.payloadHash,size:2048},{gateway:"https://secondary.example",verified:true,status:200,hash:job.payloadHash,size:2048}]})}));
   await page.goto("/#search");
   await page.getByRole("button",{name:"Immortal Gateway"}).click();
   await expect(page.getByRole("heading",{name:"Immortal Arweave Archive"})).toBeVisible();
-  await expect(page.getByRole("link",{name:/Open Independent Arweave Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
+  await expect(page.getByRole("link",{name:/Open Independent Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
+  await expect(page.getByRole("button",{name:/Publish Updated Viewer/i})).toBeVisible();
+  await expect(page.getByText(/published viewer contains 0 of 1 confirmed archives/i)).toBeVisible();
   await expect(page.getByLabel("Vault album")).toHaveValue("Family Album");
   await expect(page.getByText("1 of 1 items permanently confirmed",{exact:false})).toBeVisible();
   await expect(page.getByText(job.transactionId,{exact:true})).toBeVisible();

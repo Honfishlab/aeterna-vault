@@ -157,9 +157,11 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   };
 
   const allFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName), [viewers]);
+  const confirmedArchiveCount = jobs.filter(job=>job.status==="confirmed").length;
+  const allFilesViewerOutdated = Boolean(allFilesViewer && allFilesViewer.itemCount < confirmedArchiveCount);
 
   const publishAllFilesViewer = async () => {
-    const confirmedCount=jobs.filter(job=>job.status==="confirmed").length;
+    const confirmedCount=confirmedArchiveCount;
     if(!confirmedCount)return;
     if(!window.confirm(`Publish an independent Arweave viewer containing all ${confirmedCount} confirmed permanent archives? The viewer and its public metadata cannot be removed.`))return;
     setPublishingAll(true);setError("");
@@ -227,11 +229,12 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#F5D77F]">Verified permanent storage</p><h1 className="mt-2 font-cinzel text-3xl font-bold text-[#FFF2A8]">Immortal Arweave Archive</h1><p className="mt-2 max-w-3xl text-sm text-[#C8B1E4]">Only authenticated archive jobs recorded by Aeterna appear here. No transaction, block, gateway, or confirmation values are simulated.</p></div>
           <div className="flex flex-wrap gap-2">
-            {allFilesViewer?<a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs"><Globe className="h-4 w-4"/>Open Independent Arweave Viewer<ExternalLink className="h-3.5 w-3.5"/></a>:<button onClick={publishAllFilesViewer} disabled={publishingAll||!jobs.some(job=>job.status==="confirmed")} className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-30">{publishingAll?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}Publish All-Files Viewer</button>}
-            <button onClick={() => void load()} disabled={loading} className="gold-beveled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40"><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}/>Refresh records</button>
+            {allFilesViewer&&<a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs"><Globe className="h-4 w-4"/>Open Independent Viewer ({allFilesViewer.itemCount})<ExternalLink className="h-3.5 w-3.5"/></a>}
+            {(!allFilesViewer||allFilesViewerOutdated)&&<button onClick={publishAllFilesViewer} disabled={publishingAll||confirmedArchiveCount===0} className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-30">{publishingAll?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}{allFilesViewerOutdated?`Publish Updated Viewer (${confirmedArchiveCount} items)`:"Publish All-Files Viewer"}</button>}\n            <button onClick={() => void load()} disabled={loading} className="gold-beveled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40"><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}/>Refresh records</button>
           </div>
 
         </div>
+        {allFilesViewerOutdated&&<div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><strong>Independent viewer update available.</strong> The published viewer contains {allFilesViewer?.itemCount} of {confirmedArchiveCount} confirmed archives. Arweave pages are immutable, so publish a new version to include the remaining items.</div>}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Service wallet</p><p className={configured ? "text-emerald-300" : "text-amber-200"}>{configured ? "Configured" : "Not configured"}</p></div>
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Recorded jobs</p><p className="text-[#FFF2A8]">{jobs.length}</p></div>
