@@ -22,10 +22,14 @@ export async function processNextArweaveJob() {
     const status=await arweaveTransactionStatus(job.transaction_id);
     if (status.confirmed) {
       const verification=await verifyArweavePayload(job.transaction_id,job.payload_sha256);
-      if (!verification.verified) throw new Error("ARWEAVE_CONFIRMATION_HASH_MISMATCH");
+      const primary=verification.gateways[0];
+      if (!primary?.verified) {
+        await execute("UPDATE arweave_storage_jobs SET confirmations=$1,error_message=$2,next_attempt_at=NOW()+INTERVAL $$1 minute$$,updated_at=NOW() WHERE id=$3",[status.confirmations,"Transaction confirmed; primary gateway payload is still propagating.",job.id]);
+        return {id:job.id,status:"submitted",chainConfirmed:true,payloadAvailable:false};
+      }
       await execute("UPDATE arweave_storage_jobs SET status=$$confirmed$$,block_height=$1,confirmations=$2,confirmed_at=NOW(),updated_at=NOW(),error_message=NULL WHERE id=$3",[status.blockHeight,status.confirmations,job.id]);
       await notifyUser(job.user_id,"success","Permanent archive confirmed",job.original_name+" is confirmed on Arweave.",{actionView:"audit",entityType:"arweave_storage_job",entityId:job.id});
-      return {id:job.id,status:"confirmed"};
+      return {id:job.id,status:"confirmed",secondaryGatewayVerified:Boolean(verification.gateways[1]?.verified)};
     }
     await execute("UPDATE arweave_storage_jobs SET confirmations=$1,next_attempt_at=NOW()+INTERVAL $$1 minute$$,updated_at=NOW() WHERE id=$2",[status.confirmations,job.id]);
     return {id:job.id,status:"submitted"};
