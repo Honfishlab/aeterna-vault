@@ -9,6 +9,18 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/notifications", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({notifications:[],unread:0}) }));
 });
 
+test("moves legacy destinations into a left rail on narrower desktop screens", async ({ page }) => {
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto("/#storage");
+  await expect(page.locator("#side-nav-memorials")).toBeVisible();
+  await expect(page.locator("#side-nav-legacy")).toBeVisible();
+  await expect(page.locator("#side-nav-locker")).toBeVisible();
+  await expect(page.locator("#nav-link-memorials")).toBeHidden();
+  await page.setViewportSize({width:1800,height:900});
+  await expect(page.locator("#side-nav-memorials")).toBeHidden();
+  await expect(page.locator("#nav-link-memorials")).toBeVisible();
+});
+
 test("shows quota warning and storage plan usage", async ({ page }) => {
   await page.route("**/api/media/storage-summary", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({
     totals:{activeBytes:4_900_000_000,trashBytes:0,imageCount:10,videoCount:2},albums:[],plan:"starter",quotaBytes:5_368_709_120,estimatedMonthlyStorageUsd:0.07,

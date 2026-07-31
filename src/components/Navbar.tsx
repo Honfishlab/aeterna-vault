@@ -77,6 +77,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'pricing', label: 'Plans & Pricing', icon: Award },
     { id: 'empty', label: 'New Vault', icon: PlusCircle },
   ];
+  const sideNavIds = new Set<ViewMode>(['legacy', 'memorials', 'locker']);
+  const sideNavItems = navItems.filter(item => sideNavIds.has(item.id));
 
   return (
     <header id="main-header" className="sticky top-0 z-40 bg-[#120B21]/95 backdrop-blur-xl border-b border-[#DFB260]/30 text-[#E8DDF5]">
@@ -89,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectView(currentUser ? 'dashboard' : 'landing')}
           >
             <AeternaLogo size="md" showTitle={false} className="transition-transform duration-300 group-hover:scale-105 shrink-0" />
-            <div className="hidden sm:block">
+            <div className="hidden min-[1750px]:block">
               <div className="flex items-center space-x-2.5">
                 <span className="font-cinzel font-bold text-xl sm:text-2xl md:text-3xl tracking-[0.22em] text-transparent bg-clip-text bg-gradient-to-r from-[#FFF8D0] via-[#F5D77F] to-[#B88E4C] drop-shadow-[0_2px_12px_rgba(223,178,96,0.35)]">
                   AETERNA
@@ -106,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Quick Search Input */}
-          <form onSubmit={onSearchSubmit} className="hidden md:flex items-center flex-1 max-w-xs mx-4">
+          <form onSubmit={onSearchSubmit} className="hidden min-[1750px]:flex items-center flex-1 max-w-xs mx-4">
             <div className="relative w-full">
               <Search className="w-3.5 h-3.5 absolute left-3.5 top-2.5 text-[#C8B1E4]/60" />
               <input
@@ -120,23 +122,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </form>
 
           {/* Navigation Links (Desktop) */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          <nav className="hidden md:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
+              const isSideItem = sideNavIds.has(item.id);
               const isActive = currentView === item.id;
               return (
                 <button
                   key={item.id}
                   id={`nav-link-${item.id}`}
+                  aria-label={item.label}
+                  title={item.label}
                   onClick={() => onSelectView(item.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+                  className={`${isSideItem ? 'hidden min-[1750px]:flex' : 'flex'} items-center space-x-1.5 px-2 min-[1750px]:px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                     isActive
                       ? 'bg-gradient-to-r from-[#DFB260]/20 to-[#7353A0]/30 text-[#FFF2A8] border border-[#DFB260]/50 shadow-[0_0_12px_rgba(223,178,96,0.2)]'
                       : 'text-[#C8B1E4]/80 hover:text-[#FFF2A8] hover:bg-[#1A0C33]/60'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]/70'}`} />
-                  <span className="font-sans">{item.label}</span>
+                  <span className="hidden min-[1750px]:inline font-sans">{item.label}</span>
                 </button>
               );
             })}
@@ -150,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-quick-record-video"
                 onClick={onOpenVideoRecorder}
-                className="hidden md:flex items-center space-x-1.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-2 text-xs rounded-xl shadow-md border border-amber-400/40 transition-all cursor-pointer active:scale-95"
+                className="hidden min-[1750px]:flex items-center space-x-1.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-2 text-xs rounded-xl shadow-md border border-amber-400/40 transition-all cursor-pointer active:scale-95"
                 title="Turn on camera for live video or photo capture"
               >
                 <Video className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
@@ -163,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-vault-export-backup"
                 onClick={onOpenExportModal}
-                className="hidden xl:flex items-center space-x-1.5 bg-[#0A0514] hover:bg-[#1A0C33] text-[#F5D77F] border border-[#DFB260]/40 font-semibold px-3 py-2 text-xs rounded-xl shadow transition-all cursor-pointer active:scale-95"
+                className="hidden min-[1750px]:flex items-center space-x-1.5 bg-[#0A0514] hover:bg-[#1A0C33] text-[#F5D77F] border border-[#DFB260]/40 font-semibold px-3 py-2 text-xs rounded-xl shadow transition-all cursor-pointer active:scale-95"
                 title="Generate & Download Vault JSON Backup"
               >
                 <Archive className="w-3.5 h-3.5 text-[#F5D77F]" />
@@ -178,7 +183,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="hidden sm:flex items-center space-x-1.5 gold-filled-btn px-4 py-2 text-xs cursor-pointer active:scale-95"
             >
               <PlusCircle className="w-3.5 h-3.5 text-[#120B21]" />
-              <span>+ New Memory</span>
+              <span className="hidden min-[1750px]:inline">+ New Memory</span>
             </button>
 
             {/* Wallet Connect button */}
@@ -235,7 +240,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Mobile Navigation Dropdown */}
-        <div className="lg:hidden flex items-center justify-between py-2 border-t border-[#DFB260]/20 overflow-x-auto space-x-1 no-scrollbar">
+        <div className="md:hidden flex items-center justify-between py-2 border-t border-[#DFB260]/20 overflow-x-auto space-x-1 no-scrollbar">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -256,6 +261,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </div>
       </div>
+      <nav aria-label="Legacy sections" className="hidden md:flex min-[1750px]:!hidden fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
+        <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Legacy</p>
+        {sideNavItems.map(item => {
+          const Icon = item.icon;
+          const isActive = currentView === item.id;
+          return <button key={item.id} id={`side-nav-${item.id}`} onClick={() => onSelectView(item.id)} title={item.label} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ${isActive ? 'border-[#DFB260]/60 bg-[#DFB260]/20 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#DFB260]/30 hover:bg-[#1A0C33] hover:text-[#FFF2A8]'}`}>
+            <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]'}`}/><span>{item.label}</span>
+          </button>;
+        })}
+      </nav>
     </header>
   );
 };

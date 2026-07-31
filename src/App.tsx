@@ -483,7 +483,7 @@ export default function App() {
           />
         </div>
       ) : (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        <main className="max-w-7xl mx-auto md:ml-40 min-[1750px]:ml-auto px-4 sm:px-6 lg:px-8 pt-8">
           {currentView === 'dashboard' && (
             <DashboardView
               onSelectView={setCurrentView}
