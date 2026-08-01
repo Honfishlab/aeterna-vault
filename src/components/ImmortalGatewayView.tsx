@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, ExternalLink, FileCheck, FolderArchive, Globe, Loader2, Lock, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Heir, LegacyLetter, MemoryItem } from "../types";
 import { queuePermanentArchive, verifyAndDecryptArchive } from "../lib/permanentArchive";
+import { getArchiveMasterPassphrase } from "../lib/archiveMasterSession";
 import { PassphraseRecoveryVault } from "./PassphraseRecoveryVault";
+import { ArchiveMasterSecurity } from "./ArchiveMasterSecurity";
 
 interface ImmortalGatewayViewProps {
   memories: MemoryItem[];
@@ -69,6 +71,8 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const [acknowledgePermanent, setAcknowledgePermanent] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishingAll, setPublishingAll] = useState(false);
+  const [rekeying, setRekeying] = useState(false);
+  const [rekeyProgress, setRekeyProgress] = useState({current:0,total:0,item:""});
   const [albums, setAlbums] = useState<AlbumReadiness[]>([]);
   const [selectedAlbumName, setSelectedAlbumName] = useState("");
   const [albumPassphrase, setAlbumPassphrase] = useState("");
@@ -160,7 +164,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const allFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName && viewer.status === "confirmed"), [viewers]);
   const pendingAllFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName && viewer.status === "submitted"), [viewers]);
   const confirmedArchiveCount = jobs.filter(job=>job.status==="confirmed").length;
-  const allFilesViewerOutdated = Boolean(allFilesViewer && (allFilesViewer.itemCount < confirmedArchiveCount || Number(allFilesViewer.schemaVersion || 1) < 2));
+  const allFilesViewerOutdated = Boolean(allFilesViewer && (allFilesViewer.itemCount < confirmedArchiveCount || Number(allFilesViewer.schemaVersion || 1) < 3));
 
   const publishAllFilesViewer = async () => {
     const confirmedCount=confirmedArchiveCount;
@@ -173,6 +177,28 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
       await load();
     }catch(reason){setError(reason instanceof Error?reason.message:"All-files viewer publication failed.");}
     finally{setPublishingAll(false);}
+  };
+
+  const legacyArchiveJobs = useMemo(() => {
+    const modernMedia=new Set(jobs.filter(job=>job.mediaId && job.encryptionMetadata?.keyManagement==="envelope-v1" && !["failed","cancelled"].includes(job.status)).map(job=>job.mediaId));
+    const seen=new Set<string>();
+    return jobs.filter(job=>{const mediaId=String(job.mediaId||"");if(!mediaId||seen.has(mediaId)||modernMedia.has(mediaId)||job.status!=="confirmed")return false;seen.add(mediaId);return true;});
+  },[jobs]);
+
+  const migrateLegacyArchives = async () => {
+    const master=getArchiveMasterPassphrase();
+    if(master.length<12){setError("Unlock Permanent Vault Master Security before migrating legacy archives.");return;}
+    if(!legacyArchiveJobs.length||!window.confirm(`Create ${legacyArchiveJobs.length} new master-secured Arweave archives from the private originals? Existing permanent transactions remain unchanged and network fees apply.`))return;
+    setRekeying(true);setError("");setRekeyProgress({current:0,total:legacyArchiveJobs.length,item:""});
+    try{
+      for(let index=0;index<legacyArchiveJobs.length;index+=1){
+        const job=legacyArchiveJobs[index];setRekeyProgress({current:index+1,total:legacyArchiveJobs.length,item:job.name});
+        const response=await fetch(`/api/media/${encodeURIComponent(String(job.mediaId))}`,{cache:"no-store"});if(!response.ok)throw new Error(`Could not load ${job.name} from private storage.`);
+        const blob=await response.blob(),file=new File([blob],job.name,{type:job.contentType||blob.type||"application/octet-stream"});
+        await queuePermanentArchive(file,master,undefined,String(job.mediaId));
+      }
+      await load();
+    }catch(reason){setError(reason instanceof Error?reason.message:"Legacy archive migration failed.");await load();}finally{setRekeying(false);}
   };
 
   const selectedAlbum = useMemo(() => albums.find(album => album.albumName === selectedAlbumName), [albums, selectedAlbumName]);
@@ -237,13 +263,17 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           </div>
 
         </div>
-        {pendingAllFilesViewer?<div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><Loader2 className="h-4 w-4 animate-spin"/><span><strong>Viewer publication awaiting Arweave confirmation.</strong> The {pendingAllFilesViewer.itemCount}-item viewer will become clickable only after the transaction is found and confirmed on-chain.</span></div>:allFilesViewerOutdated&&<div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><strong>Independent viewer update available.</strong> {Number(allFilesViewer?.schemaVersion||1)<2?"The published viewer uses the older format. Publish version 2 for one-passphrase unlocking, album grouping, and full-screen images.":`The published viewer contains ${allFilesViewer?.itemCount} of ${confirmedArchiveCount} confirmed archives. Publish a new version to include the remaining items.`}</div>}
+        {pendingAllFilesViewer?<div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><Loader2 className="h-4 w-4 animate-spin"/><span><strong>Viewer publication awaiting Arweave confirmation.</strong> The {pendingAllFilesViewer.itemCount}-item viewer will become clickable only after the transaction is found and confirmed on-chain.</span></div>:allFilesViewerOutdated&&<div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><strong>Independent viewer update available.</strong> {Number(allFilesViewer?.schemaVersion||1)<3?"The published viewer uses the older format. Publish version 3 for one-master-passphrase envelope encryption, album grouping, and full-screen images.":`The published viewer contains ${allFilesViewer?.itemCount} of ${confirmedArchiveCount} confirmed archives. Publish a new version to include the remaining items.`}</div>}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Service wallet</p><p className={configured ? "text-emerald-300" : "text-amber-200"}>{configured ? "Configured" : "Not configured"}</p></div>
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Recorded jobs</p><p className="text-[#FFF2A8]">{jobs.length}</p></div>
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Confirmed</p><p className="text-emerald-300">{jobs.filter(job => job.status === "confirmed").length}</p></div>
         </div>
       </section>
+
+      <ArchiveMasterSecurity/>
+
+      {legacyArchiveJobs.length>0&&<section className="rounded-3xl border border-amber-300/30 bg-amber-500/10 p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-cinzel text-xl text-[#FFF2A8]">Unify legacy archive security</h2><p className="mt-2 max-w-3xl text-xs text-amber-100">{legacyArchiveJobs.length} confirmed legacy archives still use older per-upload passphrases. Create new envelope-encrypted transactions from their private originals so one master passphrase unlocks the current collection.</p></div><button onClick={migrateLegacyArchives} disabled={rekeying} className="gold-filled-btn px-5 py-3 text-xs disabled:opacity-40">{rekeying?<Loader2 className="mr-2 inline h-4 w-4 animate-spin"/>:<Lock className="mr-2 inline h-4 w-4"/>}Migrate {legacyArchiveJobs.length} legacy archives</button></div>{rekeying&&<div className="mt-4 rounded-xl bg-black/20 p-3 text-xs text-[#FFF2A8]">Re-keying {rekeyProgress.current} of {rekeyProgress.total}: {rekeyProgress.item}. Keep this page open during browser encryption.</div>}</section>}
 
       <PassphraseRecoveryVault/>
 

@@ -448,9 +448,9 @@ export async function POST(request: Request) {
     try{
       const id=crypto.randomUUID(),createdAt=new Date().toISOString();
       const html=buildArweaveCollectionHtml({title,createdAt,archives});
-      const manifestHash=sha256Hex(new TextEncoder().encode(JSON.stringify({schema:2,title,scope:allFiles?"all":"album",albumName,createdAt,archives})));
+      const manifestHash=sha256Hex(new TextEncoder().encode(JSON.stringify({schema:3,title,scope:allFiles?"all":"album",albumName,createdAt,archives})));
       const result=await uploadArweaveCollectionPage({html,collectionId:id,title,manifestHash,itemCount:archives.length});
-      await execute("INSERT INTO arweave_collection_viewers(id,user_id,title,album_name,transaction_id,manifest_sha256,item_count,schema_version) VALUES($1,$2,$3,$4,$5,$6,$7,2)",[id,user.id,title,albumName,result.transactionId,manifestHash,archives.length]);
+      await execute("INSERT INTO arweave_collection_viewers(id,user_id,title,album_name,transaction_id,manifest_sha256,item_count,schema_version) VALUES($1,$2,$3,$4,$5,$6,$7,3)",[id,user.id,title,albumName,result.transactionId,manifestHash,archives.length]);
       await notifyUser(user.id,"info","Arweave viewer submitted",title+" was submitted and is awaiting confirmation.",{actionView:"immortal",entityType:"arweave_collection_viewer",entityId:id});
       return json({success:true,id,albumName,transactionId:result.transactionId,status:"submitted",itemCount:archives.length,url:"https://arweave.net/"+result.transactionId});
     }catch(error:any){console.error("Arweave collection publication failed",error);return json({error:error?.message||"Collection publication failed."},502);}

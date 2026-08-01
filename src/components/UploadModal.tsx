@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MemoryItem } from '../types';
 import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
 import { queuePermanentArchive } from '../lib/permanentArchive';
+import { getArchiveMasterPassphrase, setArchiveMasterPassphrase } from '../lib/archiveMasterSession';
 import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
 import { BackgroundImportProgress, ImportActivitySummary } from './BackgroundImportProgress';
 import { 
@@ -84,7 +85,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [tags, setTags] = useState('Family, Summer, Memories');
   const [people, setPeople] = useState('Wayne, Clara Pendelton');
   const [encryptionLevel, setEncryptionLevel] = useState<'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof'>('Level 5 Protected');
-  const [archivalPassphrase, setArchivalPassphrase] = useState("" );
+  const [archivalPassphrase, setArchivalPassphrase] = useState(() => getArchiveMasterPassphrase());
 
   // AI Auto-Tagging state & Real-time Progress Indicator
   const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
@@ -244,6 +245,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [cipherHash, setCipherHash] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (isOpen) setArchivalPassphrase(getArchiveMasterPassphrase()); }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -486,6 +489,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       }
     }
     if (!title) return;
+    if (archivalPassphrase.length >= 12) setArchiveMasterPassphrase(archivalPassphrase);
 
     setIsArchiving(true);
     setArchiveProgress(5);
@@ -1393,9 +1397,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
 
             <div className="rounded-2xl border border-[#DFB260]/30 bg-[#120B21] p-3">
-              <label className="block text-[#FFF2A8] font-semibold mb-1">Permanent archive passphrase</label>
-              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="12+ characters; never stored by Aeterna" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
-              <p className="mt-2 text-[10px] text-[#C8B1E4]">Optional. Local files under 10 MB are encrypted in this browser and queued for real Arweave storage. Without it, the file remains private in R2 only.</p>
+              <label className="block text-[#FFF2A8] font-semibold mb-1">Permanent Vault Master Passphrase</label>
+              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="One passphrase for every permanent archive" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
+              <p className="mt-2 text-[10px] text-[#C8B1E4]">Use the same master passphrase for every album and memory. It is retained only for this browser session; each file still receives its own random encryption key. Files without it remain private in R2.</p>
             </div>
 
             {cloudActivity.transferring > 0 && (

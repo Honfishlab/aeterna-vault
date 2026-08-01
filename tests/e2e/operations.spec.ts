@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildArweaveCollectionHtml } from "../../server/arweaveCollection";
+import { decryptArchiveCipher } from "../../src/lib/permanentArchive";
 
 const user = { id:"user-1",name:"Vault Owner",email:"owner@example.com",role:"Vault Owner",authMethod:"Email & Passcode",signedInAt:new Date().toISOString(),securityLevel:"Quantum-Proof AES-GCM" };
 
@@ -63,9 +64,9 @@ test("encrypts a small archive before staging and queues it for Arweave", async 
   await page.route("**/api/arweave/archive/jobs", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({configured:false,jobs:[]}) }));
   await page.route("**/api/arweave/albums", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,albums:[{albumName:"Family Album",itemCount:1,totalBytes:2048,confirmedCount:1,pendingCount:0,failedCount:0,eligibleCount:0,ineligibleCount:0,items:[{memoryId:"memory-1",mediaId:"media-1",name:"family.jpg",contentType:"image/jpeg",sizeBytes:2048,mediaStatus:"ready",archiveStatus:"confirmed",transactionId:job.transactionId}]}]})}));
   await page.route("**/api/arweave/archive/price?**", route => route.fulfill({contentType:"application/json",body:JSON.stringify({ar:"0.00001",winston:"10000000"})}));
-  let stagedBytes=0; let authorization:any=null;
+  let stagedBytes=0; let stagedPayload=Buffer.alloc(0); let authorization:any=null;
   await page.route("**/api/arweave/archive/presign", async route => { authorization=route.request().postDataJSON(); await route.fulfill({contentType:"application/json",body:JSON.stringify({jobId:"archive-1",uploadUrl:"http://127.0.0.1:4173/staging-upload"})}); });
-  await page.route("**/staging-upload", async route => { stagedBytes=route.request().postDataBuffer()?.byteLength||0; await route.fulfill({status:200,body:""}); });
+  await page.route("**/staging-upload", async route => { stagedPayload=route.request().postDataBuffer()||Buffer.alloc(0); stagedBytes=stagedPayload.byteLength; await route.fulfill({status:200,body:""}); });
   await page.route("**/api/arweave/archive/complete", route => route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,jobId:"archive-1"})}));
   await page.goto("/#account");
   await page.locator("input[type=file]").setInputFiles({name:"proof.txt",mimeType:"text/plain",buffer:Buffer.from("private family archive proof")});
@@ -75,7 +76,11 @@ test("encrypts a small archive before staging and queues it for Arweave", async 
   expect(authorization.payloadHash).toHaveLength(64);
   expect([...authorization.payloadHash].every((character:string) => "abcdef0123456789".includes(character))).toBe(true);
   expect(authorization.encryptionMetadata.algorithm).toBe("AES-256-GCM");
+  expect(authorization.encryptionMetadata.keyManagement).toBe("envelope-v1");
+  expect(authorization.encryptionMetadata.keyWrap.ciphertext.length).toBeGreaterThan(40);
   expect(stagedBytes).toBeGreaterThan(Buffer.byteLength("private family archive proof"));
+  const decrypted=await decryptArchiveCipher(new Uint8Array(stagedPayload).buffer,authorization.encryptionMetadata,"correct horse archive");
+  expect(new TextDecoder().decode(decrypted)).toBe("private family archive proof");
 });
 
 
@@ -104,7 +109,9 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.goto("/#search");
   await page.getByRole("button",{name:"Immortal Gateway"}).click();
   await expect(page.getByRole("heading",{name:"Immortal Arweave Archive"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Permanent Vault Master Security"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Archival Passphrase Recovery Vault"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Unify legacy archive security"})).toBeVisible();
   await expect(page.getByRole("link",{name:/Open Independent Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
   await expect(page.getByRole("button",{name:/Publish Updated Viewer/i})).toBeVisible();
   await expect(page.getByText(/published viewer uses the older format/i)).toBeVisible();
@@ -130,6 +137,7 @@ test("standalone collection page references Arweave and never R2", async ({ page
   expect(html).toContain("https://arweave.net/");
   expect(html).toContain("realTx123");
   expect(html).toContain("PBKDF2");
+  expect(html).toContain("envelope-v1");
   expect(html).toContain("Collection archival passphrase");
   expect(html).toContain("Verify & decrypt all");
   expect(html).toContain("Full-size image");
