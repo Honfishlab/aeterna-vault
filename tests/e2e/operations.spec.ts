@@ -59,6 +59,7 @@ test("persistent notifications appear and can be dismissed", async ({ page }) =>
 
 test("encrypts a small archive before staging and queues it for Arweave", async ({ page }) => {
   await page.route("**/api/account", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({account:{...user,plan:"starter",emailVerifiedAt:new Date().toISOString()},sessions:[],providers:[]}) }));
+  await page.route("**/api/arweave/passphrases", route => route.fulfill({contentType:"application/json",body:JSON.stringify({records:[]})}));
   await page.route("**/api/arweave/archive/jobs", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({configured:false,jobs:[]}) }));
   await page.route("**/api/arweave/albums", route => route.fulfill({contentType:"application/json",body:JSON.stringify({configured:true,albums:[{albumName:"Family Album",itemCount:1,totalBytes:2048,confirmedCount:1,pendingCount:0,failedCount:0,eligibleCount:0,ineligibleCount:0,items:[{memoryId:"memory-1",mediaId:"media-1",name:"family.jpg",contentType:"image/jpeg",sizeBytes:2048,mediaStatus:"ready",archiveStatus:"confirmed",transactionId:job.transactionId}]}]})}));
   await page.route("**/api/arweave/archive/price?**", route => route.fulfill({contentType:"application/json",body:JSON.stringify({ar:"0.00001",winston:"10000000"})}));
@@ -103,6 +104,7 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.goto("/#search");
   await page.getByRole("button",{name:"Immortal Gateway"}).click();
   await expect(page.getByRole("heading",{name:"Immortal Arweave Archive"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Archival Passphrase Recovery Vault"})).toBeVisible();
   await expect(page.getByRole("link",{name:/Open Independent Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
   await expect(page.getByRole("button",{name:/Publish Updated Viewer/i})).toBeVisible();
   await expect(page.getByText(/published viewer contains 0 of 1 confirmed archives/i)).toBeVisible();

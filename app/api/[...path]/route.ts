@@ -150,6 +150,12 @@ export async function GET(request: Request) {
     return json({configured:arweaveConfigured(),albums});
   }
 
+  if (route === "arweave/passphrases") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const records=await query<any>("SELECT id,label,ciphertext,salt,iv,iterations,created_at AS \"createdAt\",updated_at AS \"updatedAt\",last_retrieved_at AS \"lastRetrievedAt\" FROM archival_passphrase_recovery WHERE user_id=$1 ORDER BY updated_at DESC",[user.id]);
+    return json({records});
+  }
+
   if (route === "arweave/collection") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     const rows=await query<any>("SELECT id,title,album_name AS \"albumName\",transaction_id AS \"transactionId\",manifest_sha256 AS \"manifestHash\",item_count AS \"itemCount\",status,block_height AS \"blockHeight\",confirmations,error_message AS error,submitted_at AS \"submittedAt\",confirmed_at AS \"confirmedAt\" FROM arweave_collection_viewers WHERE user_id=$1 ORDER BY submitted_at DESC LIMIT 20",[user.id]);
@@ -390,7 +396,31 @@ export async function POST(request: Request) {
     return json({ error: error?.message === 'REQUEST_TOO_LARGE' ? 'Request exceeds the 16 MB service limit.' : 'Invalid JSON request.' }, error?.message === 'REQUEST_TOO_LARGE' ? 413 : 400);
   }
 
-  if (["arweave/collection/publish", "arweave/archive/presign", "arweave/archive/complete", "arweave/archive/retry", "notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+  if (["arweave/passphrases/save", "arweave/passphrases/delete", "arweave/passphrases/retrieved", "arweave/collection/publish", "arweave/archive/presign", "arweave/archive/complete", "arweave/archive/retry", "notifications/read", "notifications/clear", "auth/register", "auth/login", "auth/logout", "auth/request-reset", "auth/reset-password", "auth/request-verification", "auth/verify-email", "account/profile", "account/password", "account/session/revoke", "account/delete", "vault/sync", "media/presign", "media/complete", "media/trash", "media/restore", "media/trash-album", "media/restore-album", "media/purge-album", "media/thumbnail/select", "integrations/google/import", "integrations/google/disconnect", "import-jobs/queue-drive", "integrations/google-photos/session", "integrations/google-photos/queue", "import-jobs/cancel", "import-jobs/retry", "import-jobs/session-action", "import-jobs/acknowledge"].includes(route) && !sameOrigin(request)) return json({ error: "Cross-site request rejected." }, 403);
+
+  if (route === "arweave/passphrases/save") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const label=String(body.label||"").trim().slice(0,100);
+    const ciphertext=String(body.ciphertext||""),salt=String(body.salt||""),iv=String(body.iv||"");
+    const iterations=Number(body.iterations||0);
+    if(!label||!ciphertext||!salt||!iv||iterations<100000||iterations>1000000)return json({error:"Invalid encrypted recovery record."},400);
+    if(ciphertext.length>10000||salt.length>200||iv.length>200)return json({error:"Encrypted recovery record is too large."},413);
+    const id=crypto.randomUUID();
+    await execute("INSERT INTO archival_passphrase_recovery(id,user_id,label,ciphertext,salt,iv,iterations) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,user.id,label,ciphertext,salt,iv,iterations]);
+    return json({success:true,id});
+  }
+
+  if (route === "arweave/passphrases/delete") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    await execute("DELETE FROM archival_passphrase_recovery WHERE id=$1 AND user_id=$2",[String(body.id||""),user.id]);
+    return json({success:true});
+  }
+
+  if (route === "arweave/passphrases/retrieved") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    await execute("UPDATE archival_passphrase_recovery SET last_retrieved_at=NOW() WHERE id=$1 AND user_id=$2",[String(body.id||""),user.id]);
+    return json({success:true});
+  }
 
   if (route === "arweave/collection/publish") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);

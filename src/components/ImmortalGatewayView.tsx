@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, ExternalLink, FileCheck, FolderArchive, Globe, Loader2, Lock, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Heir, LegacyLetter, MemoryItem } from "../types";
 import { queuePermanentArchive, verifyAndDecryptArchive } from "../lib/permanentArchive";
+import { PassphraseRecoveryVault } from "./PassphraseRecoveryVault";
 
 interface ImmortalGatewayViewProps {
   memories: MemoryItem[];
@@ -243,6 +244,8 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Confirmed</p><p className="text-emerald-300">{jobs.filter(job => job.status === "confirmed").length}</p></div>
         </div>
       </section>
+
+      <PassphraseRecoveryVault/>
 
       <section className="cosmic-card-gold rounded-3xl p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
