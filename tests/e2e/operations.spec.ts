@@ -107,7 +107,7 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await expect(page.getByRole("heading",{name:"Archival Passphrase Recovery Vault"})).toBeVisible();
   await expect(page.getByRole("link",{name:/Open Independent Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
   await expect(page.getByRole("button",{name:/Publish Updated Viewer/i})).toBeVisible();
-  await expect(page.getByText(/published viewer contains 0 of 1 confirmed archives/i)).toBeVisible();
+  await expect(page.getByText(/published viewer uses the older format/i)).toBeVisible();
   await expect(page.getByLabel("Vault album")).toHaveValue("Family Album");
   await expect(page.getByText("1 of 1 items permanently confirmed",{exact:false})).toBeVisible();
   await expect(page.getByText(job.transactionId,{exact:true})).toBeVisible();
@@ -125,11 +125,19 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
 });
 
 
-test("standalone collection page references Arweave and never R2", () => {
-  const html=buildArweaveCollectionHtml({title:"Family Forever",createdAt:"2026-07-29T00:00:00.000Z",archives:[{id:"job-1",name:"family.jpg",transactionId:"realTx123",payloadHash:"a".repeat(64),contentType:"image/jpeg",sizeBytes:2048,encryptionMetadata:{algorithm:"AES-256-GCM",kdf:"PBKDF2-SHA256",iterations:310000,iv:"aXY=",salt:"c2FsdA=="}}]});
+test("standalone collection page references Arweave and never R2", async ({ page }) => {
+  const html=buildArweaveCollectionHtml({title:"Family Forever",createdAt:"2026-07-29T00:00:00.000Z",archives:[{id:"job-1",name:"family.jpg",albumName:"Family Album",transactionId:"realTx123",payloadHash:"a".repeat(64),contentType:"image/jpeg",sizeBytes:2048,encryptionMetadata:{algorithm:"AES-256-GCM",kdf:"PBKDF2-SHA256",iterations:310000,iv:"aXY=",salt:"c2FsdA=="}}]});
   expect(html).toContain("https://arweave.net/");
   expect(html).toContain("realTx123");
   expect(html).toContain("PBKDF2");
+  expect(html).toContain("Collection archival passphrase");
+  expect(html).toContain("Verify & decrypt all");
+  expect(html).toContain("Full-size image");
+  expect(html).toContain("Family Album");
   expect(html).not.toContain("/api/media/");
   expect(html).not.toContain("r2.cloudflarestorage.com");
+  await page.setContent(html);
+  await expect(page.getByRole("heading",{name:"Family Album"})).toBeVisible();
+  await expect(page.getByPlaceholder("Collection archival passphrase")).toHaveCount(1);
+  await expect(page.getByRole("button",{name:"Verify & decrypt all"})).toBeVisible();
 });

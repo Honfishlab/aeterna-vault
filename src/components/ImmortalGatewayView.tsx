@@ -36,7 +36,7 @@ interface Verification {
 }
 
 interface CollectionViewer {
-  id: string; title: string; albumName?: string | null; transactionId: string; itemCount: number;
+  id: string; title: string; albumName?: string | null; transactionId: string; itemCount: number; schemaVersion?: number;
   status: "submitted" | "confirmed" | "failed"; blockHeight?: number | null; confirmations?: number; submittedAt: string;
 }
 
@@ -160,7 +160,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const allFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName && viewer.status === "confirmed"), [viewers]);
   const pendingAllFilesViewer = useMemo(() => viewers.find(viewer => !viewer.albumName && viewer.status === "submitted"), [viewers]);
   const confirmedArchiveCount = jobs.filter(job=>job.status==="confirmed").length;
-  const allFilesViewerOutdated = Boolean(allFilesViewer && allFilesViewer.itemCount < confirmedArchiveCount);
+  const allFilesViewerOutdated = Boolean(allFilesViewer && (allFilesViewer.itemCount < confirmedArchiveCount || Number(allFilesViewer.schemaVersion || 1) < 2));
 
   const publishAllFilesViewer = async () => {
     const confirmedCount=confirmedArchiveCount;
@@ -237,7 +237,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           </div>
 
         </div>
-        {pendingAllFilesViewer?<div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><Loader2 className="h-4 w-4 animate-spin"/><span><strong>Viewer publication awaiting Arweave confirmation.</strong> The {pendingAllFilesViewer.itemCount}-item viewer will become clickable only after the transaction is found and confirmed on-chain.</span></div>:allFilesViewerOutdated&&<div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><strong>Independent viewer update available.</strong> The published viewer contains {allFilesViewer?.itemCount} of {confirmedArchiveCount} confirmed archives. Arweave pages are immutable, so publish a new version to include the remaining items.</div>}
+        {pendingAllFilesViewer?<div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><Loader2 className="h-4 w-4 animate-spin"/><span><strong>Viewer publication awaiting Arweave confirmation.</strong> The {pendingAllFilesViewer.itemCount}-item viewer will become clickable only after the transaction is found and confirmed on-chain.</span></div>:allFilesViewerOutdated&&<div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-500/10 p-3 text-xs text-amber-100"><strong>Independent viewer update available.</strong> {Number(allFilesViewer?.schemaVersion||1)<2?"The published viewer uses the older format. Publish version 2 for one-passphrase unlocking, album grouping, and full-screen images.":`The published viewer contains ${allFilesViewer?.itemCount} of ${confirmedArchiveCount} confirmed archives. Publish a new version to include the remaining items.`}</div>}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Service wallet</p><p className={configured ? "text-emerald-300" : "text-amber-200"}>{configured ? "Configured" : "Not configured"}</p></div>
           <div className="rounded-xl bg-[#120B21] p-3"><p className="text-[10px] text-[#C8B1E4]">Recorded jobs</p><p className="text-[#FFF2A8]">{jobs.length}</p></div>

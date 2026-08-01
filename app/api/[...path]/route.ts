@@ -430,24 +430,27 @@ export async function POST(request: Request) {
     const allFiles=body.scope==="all";
     const albumName=allFiles?null:String(body.albumName||"").trim().slice(0,200);if(!allFiles&&!albumName)return json({error:"Select an album to publish."},400);
     let archives:any[]=[];
+    const snapshots=await query<any>("SELECT data FROM vault_snapshots WHERE user_id=$1",[user.id]);
+    const memories=Array.isArray(snapshots[0]?.data?.memories)?snapshots[0].data.memories:[];
+    const albumByMediaId=new Map<string,string>();
+    for(const memory of memories){if(memory?.mediaId&&memory?.albumName&&!albumByMediaId.has(String(memory.mediaId)))albumByMediaId.set(String(memory.mediaId),String(memory.albumName));}
     if(allFiles){
       archives=await query<any>("SELECT DISTINCT ON (COALESCE(media_object_id,id)) id,media_object_id AS \"mediaId\",original_name AS name,transaction_id AS \"transactionId\",payload_sha256 AS \"payloadHash\",original_content_type AS \"contentType\",encrypted_size_bytes AS \"sizeBytes\",encryption_metadata AS \"encryptionMetadata\" FROM arweave_storage_jobs WHERE user_id=$1 AND status=$$confirmed$$ AND transaction_id IS NOT NULL ORDER BY COALESCE(media_object_id,id),confirmed_at DESC,created_at DESC",[user.id]);
       if(!archives.length)return json({error:"No confirmed Arweave archives are available."},409);
     }else{
-      const snapshots=await query<any>("SELECT data FROM vault_snapshots WHERE user_id=$1",[user.id]);
-      const memories=Array.isArray(snapshots[0]?.data?.memories)?snapshots[0].data.memories:[];
       const mediaIds=[...new Set<string>(memories.filter((item:any)=>String(item?.albumName||"").toLowerCase()===albumName!.toLowerCase()&&item?.mediaId).map((item:any)=>String(item.mediaId)))];
       if(!mediaIds.length)return json({error:"The selected album has no linked media."},409);
       archives=await query<any>("SELECT DISTINCT ON (media_object_id) id,media_object_id AS \"mediaId\",original_name AS name,transaction_id AS \"transactionId\",payload_sha256 AS \"payloadHash\",original_content_type AS \"contentType\",encrypted_size_bytes AS \"sizeBytes\",encryption_metadata AS \"encryptionMetadata\" FROM arweave_storage_jobs WHERE user_id=$1 AND media_object_id=ANY($2::text[]) AND status=$$confirmed$$ AND transaction_id IS NOT NULL ORDER BY media_object_id,confirmed_at DESC,created_at DESC",[user.id,mediaIds]);
       if(!archives.length)return json({error:"This album has no confirmed Arweave archives yet."},409);
       if(archives.length!==mediaIds.length)return json({error:`This album is not ready: ${archives.length} of ${mediaIds.length} items are confirmed on Arweave.`},409);
     }
+    archives=archives.map(archive=>({...archive,albumName:albumName||albumByMediaId.get(String(archive.mediaId||""))||"Unassigned Archive"}));
     try{
       const id=crypto.randomUUID(),createdAt=new Date().toISOString();
       const html=buildArweaveCollectionHtml({title,createdAt,archives});
-      const manifestHash=sha256Hex(new TextEncoder().encode(JSON.stringify({schema:1,title,scope:allFiles?"all":"album",albumName,createdAt,archives})));
+      const manifestHash=sha256Hex(new TextEncoder().encode(JSON.stringify({schema:2,title,scope:allFiles?"all":"album",albumName,createdAt,archives})));
       const result=await uploadArweaveCollectionPage({html,collectionId:id,title,manifestHash,itemCount:archives.length});
-      await execute("INSERT INTO arweave_collection_viewers(id,user_id,title,album_name,transaction_id,manifest_sha256,item_count) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,user.id,title,albumName,result.transactionId,manifestHash,archives.length]);
+      await execute("INSERT INTO arweave_collection_viewers(id,user_id,title,album_name,transaction_id,manifest_sha256,item_count,schema_version) VALUES($1,$2,$3,$4,$5,$6,$7,2)",[id,user.id,title,albumName,result.transactionId,manifestHash,archives.length]);
       await notifyUser(user.id,"info","Arweave viewer submitted",title+" was submitted and is awaiting confirmation.",{actionView:"immortal",entityType:"arweave_collection_viewer",entityId:id});
       return json({success:true,id,albumName,transactionId:result.transactionId,status:"submitted",itemCount:archives.length,url:"https://arweave.net/"+result.transactionId});
     }catch(error:any){console.error("Arweave collection publication failed",error);return json({error:error?.message||"Collection publication failed."},502);}
