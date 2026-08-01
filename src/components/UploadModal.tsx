@@ -239,6 +239,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [archiveProgress, setArchiveProgress] = useState(0);
   const [archiveStep, setArchiveStep] = useState(1);
   const [archiveStatusText, setArchiveStatusText] = useState('');
+  const [archiveQueueResult, setArchiveQueueResult] = useState({ queued: 0, failed: 0, privateOnly: 0 });
   const [generatedTx, setGeneratedTx] = useState('');
   const [cipherHash, setCipherHash] = useState('');
 
@@ -489,6 +490,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setIsArchiving(true);
     setArchiveProgress(5);
     setArchiveStep(1);
+    setArchiveQueueResult({ queued: 0, failed: 0, privateOnly: 0 });
 
     // Format date string with time
     const parsedDate = new Date(date);
@@ -608,18 +610,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             ? title
             : `${title} (${idx + 1}/${totalItems}) - ${item.name.replace(/\.[^/.]+$/, "")}`;
 
-          if (item.file && storedMediaId && archivalPassphrase.length >= 12) {
-            setArchiveStatusText(`Encrypting permanent archive ${idx + 1} of ${totalItems}...`);
+          if (storedMediaId && archivalPassphrase.length >= 12) {
+            setArchiveStatusText(`Preparing permanent archive ${idx + 1} of ${totalItems}...`);
             try {
-              const archive = await queuePermanentArchive(item.file, archivalPassphrase, value => setArchiveProgress(Math.round(((idx + value / 100) / totalItems) * 90)), storedMediaId);
-              archiveJobId = archive.jobId;
-              archiveStatus = 'queued';
+              let archiveFile=item.file;
+              if (!archiveFile) {
+                const response=await fetch(`/api/media/${encodeURIComponent(storedMediaId)}`,{cache:"no-store"});
+                if(!response.ok)throw new Error("Private media could not be loaded for permanent archiving.");
+                const blob=await response.blob();
+                archiveFile=new File([blob],item.name,{type:contentType||blob.type||"application/octet-stream"});
+              }
+              const archive=await queuePermanentArchive(archiveFile,archivalPassphrase,value=>setArchiveProgress(Math.round(((idx+value/100)/totalItems)*90)),storedMediaId);
+              archiveJobId=archive.jobId;
+              archiveStatus="queued";
             } catch (error) {
-              archiveStatus = 'failed';
-              archiveError = error instanceof Error ? error.message : 'Permanent archive queueing failed.';
+              archiveStatus="failed";
+              archiveError=error instanceof Error?error.message:"Permanent archive queueing failed.";
             }
           }
-
           const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
 
           createdMemories.push({
@@ -658,9 +666,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           });
         }
 
+        const queuedCount=createdMemories.filter(item=>item.archiveStatus==="queued").length;
+        const failedCount=createdMemories.filter(item=>item.archiveStatus==="failed").length;
+        const privateOnlyCount=createdMemories.length-queuedCount-failedCount;
+        setArchiveQueueResult({queued:queuedCount,failed:failedCount,privateOnly:privateOnlyCount});
         setArchiveStep(3);
         setArchiveProgress(95);
-        setArchiveStatusText(`Album "${title}" saved; eligible encrypted archives are queued for background submission.`);
+        setArchiveStatusText(queuedCount?`Album "${title}" saved; ${queuedCount} permanent archive ${queuedCount===1?"job is":"jobs are"} queued${failedCount?` and ${failedCount} failed to queue`:""}.`:`Album "${title}" saved privately; no Arweave archive jobs were queued.`);
 
         setTimeout(() => {
           setArchiveProgress(100);
@@ -1469,7 +1481,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 3 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <ShieldCheck className="w-4 h-4 text-[#F5D77F]" />
-              <span>{archiveStep >= 3 ? '✓' : '⊙'} Background Arweave submission queued; confirmation will appear in the viewer</span>
+              <span>{archiveStep < 3 ? "⊙ Waiting for archive queue result" : archiveQueueResult.queued > 0 ? `✓ ${archiveQueueResult.queued} Arweave ${archiveQueueResult.queued === 1 ? "job" : "jobs"} queued; confirmation will appear in Immortal Gateway` : "No Arweave archive jobs were queued"}</span>
             </div>
           </div>
 
@@ -1489,7 +1501,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               onClick={handleFinishModal}
               className="gold-filled-btn w-full py-3 text-xs cursor-pointer font-bold uppercase tracking-wider"
             >
-              ✓ Album Permanently Sealed to Permaweb
+              {archiveQueueResult.queued > 0 ? `✓ ${archiveQueueResult.queued} Arweave ${archiveQueueResult.queued === 1 ? "job" : "jobs"} queued` : "Album saved privately — no Arweave jobs"}
             </button>
           )}
 
