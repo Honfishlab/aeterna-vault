@@ -123,6 +123,12 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   const route = routeName(request);
 
+  if (route === "audit/files") {
+    const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
+    const rows=await query<any>("SELECT m.id,m.original_name AS name,m.id AS \"mediaId\",m.thumbnail_object_key IS NOT NULL AS \"hasThumbnail\",COALESCE(m.album_name,j.album_name,v.album_name) AS \"r2AlbumName\",a.album_name AS \"arweaveAlbumName\",m.content_type AS \"contentType\",m.size_bytes AS \"bytesTotal\",CASE WHEN m.status=$$ready$$ THEN $$complete$$ ELSE m.status END AS status,m.processing_status AS \"processingStatus\",m.processing_error AS \"processingError\",a.status AS \"archiveStatus\",a.transaction_id AS \"arweaveId\",m.completed_at AS \"r2UploadedAt\",a.confirmed_at AS \"permanentArchiveDate\",a.error_message AS error FROM media_objects m LEFT JOIN LATERAL (SELECT album_name FROM media_import_jobs WHERE media_object_id=m.id AND album_name IS NOT NULL ORDER BY created_at DESC LIMIT 1) j ON TRUE LEFT JOIN LATERAL (SELECT memory->>$$albumName$$ AS album_name FROM vault_snapshots s CROSS JOIN LATERAL jsonb_array_elements(COALESCE(s.data->$$memories$$,$$[]$$::jsonb)) memory WHERE s.user_id=m.user_id AND memory->>$$mediaId$$=m.id AND COALESCE(memory->>$$albumName$$,$$$$)<>$$$$ LIMIT 1) v ON TRUE LEFT JOIN LATERAL (SELECT album_name,status,transaction_id,confirmed_at,error_message FROM arweave_storage_jobs WHERE media_object_id=m.id ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE m.user_id=$1 AND m.deleted_at IS NULL ORDER BY COALESCE(m.completed_at,m.created_at) DESC LIMIT 1000",[user.id]);
+    return json({rows});
+  }
+
   if (route === "arweave/archive/jobs") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     const jobs=await query("SELECT id,media_object_id AS \"mediaId\",original_name AS \"name\",album_name AS \"albumName\",encrypted_size_bytes AS \"sizeBytes\",payload_sha256 AS \"payloadHash\",encryption_metadata AS \"encryptionMetadata\",original_content_type AS \"contentType\",status,transaction_id AS \"transactionId\",reward_winston AS \"rewardWinston\",block_height AS \"blockHeight\",confirmations,error_message AS error,created_at AS \"createdAt\",confirmed_at AS \"confirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 500",[user.id]);

@@ -38,11 +38,12 @@ function auditStatus(row: AuditRow) {
 export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: string) => void }) {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const load = async () => {
     setLoading(true);
-    const response = await fetch("/api/import-jobs?history=true");
-    if (response.ok) setRows((await response.json()).jobs || []);
+    const response = await fetch("/api/audit/files");
+    if (response.ok) { setRows((await response.json()).rows || []); setLoadError(""); } else { const body=await response.json().catch(()=>({})); setLoadError(body.error || "Audit records could not be loaded."); }
     setLoading(false);
   };
 
@@ -71,6 +72,8 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
           <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} /> Refresh
         </button>
       </header>
+
+      {loadError && <div className="rounded-lg border border-rose-500/50 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{loadError}</div>}
 
       <div className="overflow-x-auto rounded-lg border border-[#DFB260]/35 bg-[#0A0514]/90">
         <table className="w-full min-w-[1480px] border-collapse text-left text-xs">
