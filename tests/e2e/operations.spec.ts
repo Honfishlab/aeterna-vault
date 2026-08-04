@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/notifications", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({notifications:[],unread:0}) }));
 });
 
-test("moves legacy destinations into a left rail on narrower desktop screens", async ({ page }) => {
+test("keeps legacy destinations in a left rail on desktop screens", async ({ page }) => {
   await page.setViewportSize({width:1440,height:900});
   await page.goto("/#storage");
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
@@ -21,8 +21,9 @@ test("moves legacy destinations into a left rail on narrower desktop screens", a
   expect(railBox?.y).toBeLessThan(450);
   await expect(page.locator("#nav-link-memorials")).toBeHidden();
   await page.setViewportSize({width:1800,height:900});
-  await expect(page.locator("#side-nav-memorials")).toBeHidden();
-  await expect(page.locator("#nav-link-memorials")).toBeVisible();
+  await expect(page.locator("#side-nav-memorials")).toBeVisible();
+  await expect(page.locator("#nav-link-memorials")).toBeHidden();
+  await expect(page.locator("#nav-link-dashboard")).toContainText("Dashboard");
 });
 
 test("shows quota warning and storage plan usage", async ({ page }) => {

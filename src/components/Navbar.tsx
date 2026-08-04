@@ -92,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectView(currentUser ? 'dashboard' : 'landing')}
           >
             <AeternaLogo size="md" showTitle={false} className="transition-transform duration-300 group-hover:scale-105 shrink-0" />
-            <div className="hidden min-[1750px]:block">
+            <div className="hidden min-[1280px]:block">
               <div className="flex items-center space-x-2.5">
                 <span className="font-cinzel font-bold text-xl sm:text-2xl md:text-3xl tracking-[0.22em] text-transparent bg-clip-text bg-gradient-to-r from-[#FFF8D0] via-[#F5D77F] to-[#B88E4C] drop-shadow-[0_2px_12px_rgba(223,178,96,0.35)]">
                   AETERNA
@@ -109,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Quick Search Input */}
-          <form onSubmit={onSearchSubmit} className="hidden min-[1750px]:flex items-center flex-1 max-w-xs mx-4">
+          <form onSubmit={onSearchSubmit} className="hidden min-[1600px]:flex items-center flex-1 max-w-[220px] mx-3">
             <div className="relative w-full">
               <Search className="w-3.5 h-3.5 absolute left-3.5 top-2.5 text-[#C8B1E4]/60" />
               <input
@@ -135,14 +135,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   aria-label={item.label}
                   title={item.label}
                   onClick={() => onSelectView(item.id)}
-                  className={`${isSideItem ? 'hidden min-[1750px]:flex' : 'flex'} items-center space-x-1.5 px-2 min-[1400px]:px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+                  className={`${isSideItem ? "hidden" : "flex"} items-center space-x-1 px-1.5 min-[1200px]:px-2 py-1.5 text-[11px] font-semibold rounded-xl transition-all ${
                     isActive
                       ? 'bg-gradient-to-r from-[#DFB260]/20 to-[#7353A0]/30 text-[#FFF2A8] border border-[#DFB260]/50 shadow-[0_0_12px_rgba(223,178,96,0.2)]'
                       : 'text-[#C8B1E4]/80 hover:text-[#FFF2A8] hover:bg-[#1A0C33]/60'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]/70'}`} />
-                  <span className="hidden min-[1400px]:inline font-sans">{item.label}</span>
+                  <span className="hidden min-[1200px]:inline font-sans">{item.label}</span>
                 </button>
               );
             })}
@@ -156,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-quick-record-video"
                 onClick={onOpenVideoRecorder}
-                className="hidden min-[1750px]:flex items-center space-x-1.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-2 text-xs rounded-xl shadow-md border border-amber-400/40 transition-all cursor-pointer active:scale-95"
+                className="hidden min-[1600px]:flex items-center space-x-1.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-2 text-xs rounded-xl shadow-md border border-amber-400/40 transition-all cursor-pointer active:scale-95"
                 title="Turn on camera for live video or photo capture"
               >
                 <Video className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
@@ -169,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-vault-export-backup"
                 onClick={onOpenExportModal}
-                className="hidden min-[1750px]:flex items-center space-x-1.5 bg-[#0A0514] hover:bg-[#1A0C33] text-[#F5D77F] border border-[#DFB260]/40 font-semibold px-3 py-2 text-xs rounded-xl shadow transition-all cursor-pointer active:scale-95"
+                className="hidden min-[1600px]:flex items-center space-x-1.5 bg-[#0A0514] hover:bg-[#1A0C33] text-[#F5D77F] border border-[#DFB260]/40 font-semibold px-3 py-2 text-xs rounded-xl shadow transition-all cursor-pointer active:scale-95"
                 title="Generate & Download Vault JSON Backup"
               >
                 <Archive className="w-3.5 h-3.5 text-[#F5D77F]" />
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="hidden sm:flex items-center space-x-1.5 gold-filled-btn px-4 py-2 text-xs cursor-pointer active:scale-95"
             >
               <PlusCircle className="w-3.5 h-3.5 text-[#120B21]" />
-              <span className="hidden min-[1750px]:inline">+ New Memory</span>
+              <span className="hidden min-[1500px]:inline">+ New Memory</span>
             </button>
 
             {/* Wallet Connect button */}
@@ -263,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
     </header>
-      <nav aria-label="Legacy sections" className="hidden md:flex min-[1750px]:!hidden fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
+      <nav aria-label="Legacy sections" className="hidden lg:flex fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
         <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Legacy</p>
         {sideNavItems.map(item => {
           const Icon = item.icon;
