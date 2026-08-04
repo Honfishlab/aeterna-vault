@@ -604,7 +604,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           let archiveError: string | undefined;
           if (item.file) {
             setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
-            const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)));
+            const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)), title);
             storedMediaUrl = stored?.mediaUrl || item.previewUrl;
             storedMediaId = stored?.mediaId;
           }
@@ -624,7 +624,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 const blob=await response.blob();
                 archiveFile=new File([blob],item.name,{type:contentType||blob.type||"application/octet-stream"});
               }
-              const archive=await queuePermanentArchive(archiveFile,archivalPassphrase,value=>setArchiveProgress(Math.round(((idx+value/100)/totalItems)*90)),storedMediaId);
+              const archive=await queuePermanentArchive(archiveFile,archivalPassphrase,value=>setArchiveProgress(Math.round(((idx+value/100)/totalItems)*90)),storedMediaId,title);
               archiveJobId=archive.jobId;
               archiveStatus="queued";
             } catch (error) {

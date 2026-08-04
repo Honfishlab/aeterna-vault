@@ -3,11 +3,11 @@ export interface StoredMedia {
   mediaUrl: string;
 }
 
-export async function uploadMediaFile(file: File, onProgress?: (percent: number) => void): Promise<StoredMedia | null> {
+export async function uploadMediaFile(file: File, onProgress?: (percent: number) => void, albumName?: string): Promise<StoredMedia | null> {
   const authorization = await fetch("/api/media/presign", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size }),
+    body: JSON.stringify({ name: file.name, contentType: file.type, size: file.size, albumName }),
   });
   const authorized = await authorization.json();
   if (authorization.status === 503 && authorized.code === "R2_NOT_CONFIGURED") return null;

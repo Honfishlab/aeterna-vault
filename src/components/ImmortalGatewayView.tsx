@@ -195,7 +195,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
         const job=legacyArchiveJobs[index];setRekeyProgress({current:index+1,total:legacyArchiveJobs.length,item:job.name});
         const response=await fetch(`/api/media/${encodeURIComponent(String(job.mediaId))}`,{cache:"no-store"});if(!response.ok)throw new Error(`Could not load ${job.name} from private storage.`);
         const blob=await response.blob(),file=new File([blob],job.name,{type:job.contentType||blob.type||"application/octet-stream"});
-        await queuePermanentArchive(file,master,undefined,String(job.mediaId));
+        await queuePermanentArchive(file,master,undefined,String(job.mediaId),job.albumName);
       }
       await load();
     }catch(reason){setError(reason instanceof Error?reason.message:"Legacy archive migration failed.");await load();}finally{setRekeying(false);}
@@ -228,7 +228,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
         if(!response.ok)throw new Error(`Could not load ${item.name} from private storage.`);
         const blob=await response.blob();
         const file=new File([blob],item.name,{type:item.contentType||blob.type||"application/octet-stream"});
-        await queuePermanentArchive(file,albumPassphrase,value=>setBulkProgress({current:index+1,total:eligible.length,item:item.name,percent:value}),item.mediaId);
+        await queuePermanentArchive(file,albumPassphrase,value=>setBulkProgress({current:index+1,total:eligible.length,item:item.name,percent:value}),item.mediaId,selectedAlbum.albumName);
       }
       setAlbumPassphrase("");
       await load();

@@ -42,7 +42,7 @@ export async function processNextArweaveJob() {
     const {client,GetObjectCommand}=await r2Modules();
     const object=await client.send(new GetObjectCommand({Bucket:r2Bucket(),Key:job.r2_object_key}));
     const data=new Uint8Array(await object.Body.transformToByteArray());
-    const result=await uploadEncryptedArchive({data,jobId:job.id,mediaId:job.media_object_id,payloadHash:job.payload_sha256,contentType:job.original_content_type});
+    const result=await uploadEncryptedArchive({data,jobId:job.id,mediaId:job.media_object_id,albumName:job.album_name,payloadHash:job.payload_sha256,contentType:job.original_content_type});
     await execute("UPDATE arweave_storage_jobs SET status=$$submitted$$,transaction_id=$1,reward_winston=$2,submitted_at=NOW(),next_attempt_at=NOW()+INTERVAL $$1 minute$$,updated_at=NOW(),error_message=NULL WHERE id=$3",[result.transactionId,result.rewardWinston,job.id]);
     await notifyUser(job.user_id,"info","Permanent archive submitted",job.original_name+" was submitted to Arweave and is awaiting confirmation.",{actionView:"audit",entityType:"arweave_storage_job",entityId:job.id});
     return {id:job.id,status:"submitted",transactionId:result.transactionId};

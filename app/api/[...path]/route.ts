@@ -125,7 +125,7 @@ export async function GET(request: Request) {
 
   if (route === "arweave/archive/jobs") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
-    const jobs=await query("SELECT id,media_object_id AS \"mediaId\",original_name AS \"name\",encrypted_size_bytes AS \"sizeBytes\",payload_sha256 AS \"payloadHash\",encryption_metadata AS \"encryptionMetadata\",original_content_type AS \"contentType\",status,transaction_id AS \"transactionId\",reward_winston AS \"rewardWinston\",block_height AS \"blockHeight\",confirmations,error_message AS error,created_at AS \"createdAt\",confirmed_at AS \"confirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 500",[user.id]);
+    const jobs=await query("SELECT id,media_object_id AS \"mediaId\",original_name AS \"name\",album_name AS \"albumName\",encrypted_size_bytes AS \"sizeBytes\",payload_sha256 AS \"payloadHash\",encryption_metadata AS \"encryptionMetadata\",original_content_type AS \"contentType\",status,transaction_id AS \"transactionId\",reward_winston AS \"rewardWinston\",block_height AS \"blockHeight\",confirmations,error_message AS error,created_at AS \"createdAt\",confirmed_at AS \"confirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 500",[user.id]);
     return json({configured:arweaveConfigured(),jobs});
   }
   if (route === "arweave/albums") {
@@ -501,11 +501,11 @@ export async function POST(request: Request) {
   if (route === "arweave/archive/presign") {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     if(!r2Configured())return json({error:"R2 staging is not configured."},503);
-    const name=String(body.name||"").slice(0,255),contentType=String(body.contentType||"application/octet-stream").slice(0,100),hash=String(body.payloadHash||"").toLowerCase(),size=Number(body.size||0);
+    const name=String(body.name||"").slice(0,255),albumName=String(body.albumName||"").trim().slice(0,200)||null,contentType=String(body.contentType||"application/octet-stream").slice(0,100),hash=String(body.payloadHash||"").toLowerCase(),size=Number(body.size||0);
     if(!name||!/^[a-f0-9]{64}$/.test(hash)||!Number.isSafeInteger(size)||size<1||size>10*1024*1024)return json({error:"Encrypted archive must be between 1 byte and 10 MB with a SHA-256 hash."},400);
     const id=crypto.randomUUID(),objectKey="archives/"+user.id+"/"+id+".bin";
     const {client,PutObjectCommand,getSignedUrl}=await r2Modules(); const uploadUrl=await getSignedUrl(client,new PutObjectCommand({Bucket:r2Bucket(),Key:objectKey,ContentType:"application/octet-stream"}),{expiresIn:600});
-    await execute("INSERT INTO arweave_storage_jobs(id,user_id,media_object_id,r2_object_key,original_name,original_content_type,encrypted_size_bytes,payload_sha256,encryption_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)",[id,user.id,body.mediaId?String(body.mediaId):null,objectKey,name,contentType,size,hash,JSON.stringify(body.encryptionMetadata||{})]);
+    await execute("INSERT INTO arweave_storage_jobs(id,user_id,media_object_id,r2_object_key,original_name,original_content_type,encrypted_size_bytes,payload_sha256,encryption_metadata,album_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)",[id,user.id,body.mediaId?String(body.mediaId):null,objectKey,name,contentType,size,hash,JSON.stringify(body.encryptionMetadata||{}),albumName]);
     return json({jobId:id,uploadUrl,expiresIn:600});
   }
   if (route === "arweave/archive/complete") {
@@ -672,6 +672,7 @@ export async function POST(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const name = String(body.name || "").slice(0, 255);
+      const albumName = String(body.albumName || "").trim().slice(0, 200) || null;
       const contentType = String(body.contentType || "").toLowerCase();
       const size = Number(body.size || 0);
       if (!name || !mediaTypeAllowed(contentType) || !Number.isSafeInteger(size) || size < 1 || size > 100 * 1024 * 1024) return json({ error: "Unsupported media type or file size. Maximum size is 100 MB." }, 400);
@@ -684,8 +685,8 @@ export async function POST(request: Request) {
       const mediaId = crypto.randomUUID();
       const objectKey = user.id + "/" + mediaId + "-" + safeObjectName(name);
       const { client, PutObjectCommand, getSignedUrl } = await r2Modules();
-      const uploadUrl = await getSignedUrl(client, new PutObjectCommand({ Bucket: r2Bucket(), Key: objectKey, ContentType: contentType }), { expiresIn: 600 });
-      await execute("INSERT INTO media_objects (id, user_id, object_key, original_name, content_type, size_bytes) VALUES ($1, $2, $3, $4, $5, $6)", [mediaId, user.id, objectKey, name, contentType, size]);
+      const uploadUrl = await getSignedUrl(client, new PutObjectCommand({ Bucket: r2Bucket(), Key: objectKey, ContentType: contentType, Metadata: albumName ? { "album-name": albumName } : undefined }), { expiresIn: 600 });
+      await execute("INSERT INTO media_objects (id, user_id, object_key, original_name, content_type, size_bytes, album_name) VALUES ($1, $2, $3, $4, $5, $6, $7)", [mediaId, user.id, objectKey, name, contentType, size, albumName]);
       return json({ mediaId, uploadUrl, mediaUrl: "/api/media/" + mediaId, expiresIn: 600 });
     } catch (error) { console.error("R2 upload authorization failed", error); return json({ error: "Unable to authorize media upload." }, 502); }
   }

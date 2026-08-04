@@ -44,7 +44,7 @@ export async function arweavePrice(bytes: number) {
   return { winston: String(winston), ar: api.ar.winstonToAr(String(winston)) };
 }
 
-export async function uploadEncryptedArchive(input: { data: Uint8Array; jobId: string; mediaId?: string | null; payloadHash: string; contentType: string }) {
+export async function uploadEncryptedArchive(input: { data: Uint8Array; jobId: string; mediaId?: string | null; albumName?: string | null; payloadHash: string; contentType: string }) {
   if (input.data.byteLength > MAX_DIRECT_BYTES) throw new Error("ARWEAVE_DIRECT_UPLOAD_LIMIT");
   if (sha256Hex(input.data) !== input.payloadHash.toLowerCase()) throw new Error("ARCHIVE_HASH_MISMATCH");
   const api = await client();
@@ -61,6 +61,7 @@ export async function uploadEncryptedArchive(input: { data: Uint8Array; jobId: s
     ["Schema-Version","1"],
   ];
   if (input.mediaId) tags.push(["Media-Id",input.mediaId]);
+  if (input.albumName) tags.push(["Album-Name",input.albumName.slice(0,200)]);
   for (const [name,value] of tags) transaction.addTag(name,value);
   await api.transactions.sign(transaction,jwk);
   const response = await api.transactions.post(transaction);

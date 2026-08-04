@@ -4,7 +4,11 @@ import { Loader2, RefreshCw } from "lucide-react";
 interface AuditRow {
   id: string;
   name: string;
+  mediaId?: string | null;
+  hasThumbnail?: boolean;
   albumName?: string | null;
+  r2AlbumName?: string | null;
+  arweaveAlbumName?: string | null;
   contentType?: string | null;
   mimeType?: string | null;
   bytesTotal?: number;
@@ -69,10 +73,10 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
       </header>
 
       <div className="overflow-x-auto rounded-lg border border-[#DFB260]/35 bg-[#0A0514]/90">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[1480px] border-collapse text-left text-xs">
           <thead className="bg-[#1A0C33] text-[10px] uppercase tracking-wider text-[#F5D77F]">
             <tr>
-              {["File","Album","Type","Size","Status","Arweave ID","Upload to R2 date","Permanent archive date"].map(label => <th key={label} className="border-b border-r border-[#DFB260]/25 px-3 py-3 font-semibold last:border-r-0">{label}</th>)}
+              {["Preview","File","R2 album","Arweave album","Type","Size","Status","Arweave ID","Upload to R2 date","Permanent archive date"].map(label => <th key={label} className="border-b border-r border-[#DFB260]/25 px-3 py-3 font-semibold last:border-r-0">{label}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -80,8 +84,10 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
               const status=auditStatus(row);
               const statusColor=status === "Permanent" ? "text-emerald-300" : status.includes("failed") ? "text-rose-300" : status.includes("queued") || status.includes("uploading") || status.includes("submitted") || status.includes("processing") ? "text-amber-200" : "text-[#C8B1E4]";
               return <tr key={row.id} className="border-b border-[#DFB260]/15 last:border-b-0 hover:bg-[#1A0C33]/45">
-                <td className="max-w-[260px] border-r border-[#DFB260]/15 px-3 py-2.5 font-medium text-[#FFF2A8]" title={row.name}><span className="block truncate">{row.name}</span></td>
-                <td className="max-w-[190px] border-r border-[#DFB260]/15 px-3 py-2.5 text-[#C8B1E4]">{row.albumName ? <button onClick={() => onOpenAlbum?.(row.albumName || "")} className="max-w-full truncate text-left hover:text-[#F5D77F] hover:underline">{row.albumName}</button> : "—"}</td>
+                <td className="w-[68px] border-r border-[#DFB260]/15 px-2 py-2">{row.mediaId ? ((row.contentType || row.mimeType || "").startsWith("image/") || row.hasThumbnail ? <img src={"/api/media/" + encodeURIComponent(row.mediaId) + (row.hasThumbnail ? "/thumbnail?size=small" : "")} alt="" loading="lazy" className="h-11 w-11 rounded object-cover" /> : <span className="flex h-11 w-11 items-center justify-center rounded bg-[#1A0C33] text-[9px] text-[#C8B1E4]">MEDIA</span>) : "—"}</td>
+                <td className="max-w-[260px] border-r border-[#DFB260]/15 px-3 py-2.5 font-medium text-[#FFF2A8]" title={row.name}><>{row.mediaId ? <a href={"/api/media/" + encodeURIComponent(row.mediaId)} target="_blank" rel="noreferrer" className="block truncate hover:underline">{row.name}</a> : <span className="block truncate">{row.name}</span>}</></td>
+                <td className="max-w-[190px] border-r border-[#DFB260]/15 px-3 py-2.5 text-[#C8B1E4]">{row.r2AlbumName || row.albumName ? <button onClick={() => onOpenAlbum?.(row.r2AlbumName || row.albumName || "")} className="max-w-full truncate text-left hover:text-[#F5D77F] hover:underline">{row.r2AlbumName || row.albumName}</button> : "—"}</td>
+                <td className="max-w-[190px] border-r border-[#DFB260]/15 px-3 py-2.5 text-[#C8B1E4]">{row.arweaveAlbumName || "—"}</td>
                 <td className="border-r border-[#DFB260]/15 px-3 py-2.5 font-mono text-[11px] text-[#C8B1E4]">{row.contentType || row.mimeType || "—"}</td>
                 <td className="whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5 font-mono text-[#C8B1E4]">{formatBytes(Number(row.bytesTotal || 0))}</td>
                 <td className={"whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5 font-semibold " + statusColor} title={row.error || row.processingError || status}>{status}</td>
@@ -90,8 +96,8 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
                 <td className="whitespace-nowrap px-3 py-2.5 text-[#C8B1E4]">{formatDate(row.permanentArchiveDate)}</td>
               </tr>;
             })}
-            {!loading && !rows.length && <tr><td colSpan={8} className="px-4 py-14 text-center text-[#C8B1E4]">No file operations have been recorded.</td></tr>}
-            {loading && !rows.length && <tr><td colSpan={8} className="px-4 py-14 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-[#F5D77F]" /></td></tr>}
+            {!loading && !rows.length && <tr><td colSpan={10} className="px-4 py-14 text-center text-[#C8B1E4]">No file operations have been recorded.</td></tr>}
+            {loading && !rows.length && <tr><td colSpan={10} className="px-4 py-14 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-[#F5D77F]" /></td></tr>}
           </tbody>
         </table>
       </div>
