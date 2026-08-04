@@ -16,10 +16,16 @@ test("keeps legacy destinations in a left rail on desktop screens", async ({ pag
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
   await expect(page.locator("#side-nav-legacy")).toBeVisible();
   await expect(page.locator("#side-nav-locker")).toBeVisible();
+  await expect(page.locator("#admin-nav-account")).toBeVisible();
+  await expect(page.locator("#admin-nav-pricing")).toBeVisible();
+  await expect(page.locator("#admin-nav-recycle")).toBeVisible();
   const railBox=await page.getByRole("navigation",{name:"Legacy sections"}).boundingBox();
   expect(railBox?.y).toBeGreaterThan(250);
   expect(railBox?.y).toBeLessThan(450);
   await expect(page.locator("#nav-link-memorials")).toBeHidden();
+  await expect(page.locator("#nav-link-account")).toBeHidden();
+  await expect(page.locator("#nav-link-pricing")).toBeHidden();
+  await expect(page.locator("#nav-link-recycle")).toBeHidden();
   await page.setViewportSize({width:1800,height:900});
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
   await expect(page.locator("#nav-link-memorials")).toBeHidden();

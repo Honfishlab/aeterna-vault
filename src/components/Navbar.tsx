@@ -78,7 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'empty', label: 'New Vault', icon: PlusCircle },
   ];
   const sideNavIds = new Set<ViewMode>(['legacy', 'memorials', 'locker']);
+  const adminNavIds = new Set<ViewMode>(['account', 'pricing', 'recycle']);
   const sideNavItems = navItems.filter(item => sideNavIds.has(item.id));
+  const adminNavItems = navItems.filter(item => adminNavIds.has(item.id));
 
   return (
     <>
@@ -126,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden md:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isSideItem = sideNavIds.has(item.id);
+              const isSideItem = sideNavIds.has(item.id) || adminNavIds.has(item.id);
               const isActive = currentView === item.id;
               return (
                 <button
@@ -263,16 +265,28 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
     </header>
-      <nav aria-label="Legacy sections" className="hidden lg:flex fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
-        <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Legacy</p>
-        {sideNavItems.map(item => {
-          const Icon = item.icon;
-          const isActive = currentView === item.id;
-          return <button key={item.id} id={`side-nav-${item.id}`} onClick={() => onSelectView(item.id)} title={item.label} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ${isActive ? 'border-[#DFB260]/60 bg-[#DFB260]/20 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#DFB260]/30 hover:bg-[#1A0C33] hover:text-[#FFF2A8]'}`}>
-            <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]'}`}/><span>{item.label}</span>
-          </button>;
-        })}
-      </nav>
+      <aside className="hidden lg:flex fixed left-3 top-1/2 -translate-y-1/2 z-50 w-36 flex-col gap-3" aria-label="Side navigation">
+        <nav aria-label="Legacy sections" className="flex flex-col gap-2 rounded-2xl border border-[#DFB260]/35 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
+          <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Legacy</p>
+          {sideNavItems.map(item => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            return <button key={item.id} id={'side-nav-' + item.id} onClick={() => onSelectView(item.id)} title={item.label} className={'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ' + (isActive ? 'border-[#DFB260]/60 bg-[#DFB260]/20 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#DFB260]/30 hover:bg-[#1A0C33] hover:text-[#FFF2A8]')}>
+              <Icon className={'h-4 w-4 shrink-0 ' + (isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]')}/><span>{item.label}</span>
+            </button>;
+          })}
+        </nav>
+        <nav aria-label="Administrative sections" className="flex flex-col gap-2 rounded-2xl border border-[#7353A0]/50 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
+          <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#C8B1E4]">Administrative</p>
+          {adminNavItems.map(item => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            return <button key={item.id} id={'admin-nav-' + item.id} onClick={() => onSelectView(item.id)} title={item.label} className={'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ' + (isActive ? 'border-[#DFB260]/60 bg-[#DFB260]/20 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#7353A0]/60 hover:bg-[#1A0C33] hover:text-[#FFF2A8]')}>
+              <Icon className={'h-4 w-4 shrink-0 ' + (isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]')}/><span>{item.label}</span>
+            </button>;
+          })}
+        </nav>
+      </aside>
     </>
   );
 };
