@@ -80,6 +80,16 @@ test("persistent notifications appear and can be dismissed", async ({ page }) =>
 });
 
 
+test("successful import notices auto-dismiss and cap the visible stack", async ({ page }) => {
+  const notices = Array.from({length:6}, (_,index) => ({id:"success-" + index,type:"success",title:"Import complete",message:"file-" + index + ".jpg is ready in your vault.",createdAt:new Date().toISOString(),readAt:null}));
+  await page.route("**/api/notifications", route => route.fulfill({contentType:"application/json",body:JSON.stringify({notifications:notices,unread:notices.length})}));
+  await page.route("**/api/notifications/read", route => route.fulfill({contentType:"application/json",body:"{}"}));
+  await page.goto("/#storage");
+  await expect(page.getByText("Import complete")).toHaveCount(4);
+  await expect(page.getByText("2 hidden")).toBeVisible();
+  await expect(page.getByText("Import complete")).toHaveCount(0,{timeout:8000});
+});
+
 test("encrypts a small archive before staging and queues it for Arweave", async ({ page }) => {
   await page.route("**/api/account", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({account:{...user,plan:"starter",emailVerifiedAt:new Date().toISOString()},sessions:[],providers:[]}) }));
   await page.route("**/api/arweave/passphrases", route => route.fulfill({contentType:"application/json",body:JSON.stringify({records:[]})}));

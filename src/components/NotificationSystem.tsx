@@ -144,12 +144,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode; onViewA
       const response=await fetch("/api/notifications");
       if(!response.ok||!active)return;
       const result=await response.json();
-      const durable=(result.notifications||[]).filter((item:any)=>!item.readAt).map((item:any)=>({ id:item.id,type:item.type,title:item.title,message:item.message,timestamp:new Date(item.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),duration:0 }));
+      const durable=(result.notifications||[]).filter((item:any)=>!item.readAt).map((item:any)=>({ id:item.id,type:item.type,title:item.title,message:item.message,timestamp:new Date(item.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),duration:item.type==="success"?6000:0 }));
       setNotifications(previous=>[...durable,...previous.filter(item=>item.id.startsWith("notif-") )].slice(0,25));
     };
     void refresh(); const timer=window.setInterval(refresh,15000);
     return()=>{active=false;window.clearInterval(timer);};
   },[]);
+
+  useEffect(() => {
+    const timers = notifications.filter(item => item.type === "success" && Number(item.duration || 0) > 0).map(item => window.setTimeout(() => dismissNotification(item.id), Number(item.duration)));
+    return () => timers.forEach(timer => window.clearTimeout(timer));
+  }, [notifications, dismissNotification]);
 
   // Listen for window custom events for global non-React triggers
   useEffect(() => {
@@ -205,6 +210,10 @@ const NotificationToastContainer: React.FC<NotificationToastContainerProps> = ({
 }) => {
   if (notifications.length === 0) return null;
 
+  const priority: Record<NotificationType, number> = { error: 0, warning: 1, info: 2, success: 3 };
+  const visibleNotifications = [...notifications].sort((a, b) => priority[a.type] - priority[b.type]).slice(0, 4);
+  const hiddenCount = Math.max(0, notifications.length - visibleNotifications.length);
+
   return (
     <div className="fixed bottom-5 right-5 z-[100] max-w-md w-full px-4 space-y-3 pointer-events-none">
       {notifications.length > 1 && (
@@ -214,12 +223,12 @@ const NotificationToastContainer: React.FC<NotificationToastContainerProps> = ({
             className="text-[11px] font-mono text-[#8C80A5] hover:text-[#F5D77F] bg-[#0A0414]/90 border border-[#DFB260]/30 px-2.5 py-1 rounded-full flex items-center space-x-1 shadow-lg cursor-pointer backdrop-blur-md transition-all"
           >
             <Trash2 className="w-3 h-3 text-[#DFB260]" />
-            <span>Clear Notifications ({notifications.length})</span>
+            <span>Clear Notifications ({notifications.length}){hiddenCount ? " · " + hiddenCount + " hidden" : ""}</span>
           </button>
         </div>
       )}
 
-      {notifications.map((notif) => (
+      {visibleNotifications.map((notif) => (
         <ToastItem key={notif.id} notification={notif} onDismiss={onDismiss} />
       ))}
     </div>
