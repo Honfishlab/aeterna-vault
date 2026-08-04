@@ -224,7 +224,9 @@ export async function GET(request: Request) {
     const total = totals[0] || {};
     const billableBytes = Number(total.activeBytes || 0) + Number(total.trashBytes || 0);
     const account = await query<any>("SELECT plan_code AS plan,storage_quota_bytes AS \"quotaBytes\" FROM users WHERE id=$1", [user.id]);
-    return json({ totals: total, albums, plan: account[0]?.plan || "starter", quotaBytes: Number(account[0]?.quotaBytes || 5368709120), estimatedMonthlyStorageUsd: Number((billableBytes / 1024 ** 3 * Number(process.env.R2_STORAGE_COST_PER_GB || 0.015)).toFixed(2)), estimateOnly: true });
+    const arweaveSummary = await query<any>("SELECT COUNT(*)::integer AS \"jobCount\",COUNT(*) FILTER (WHERE status=$$confirmed$$)::integer AS confirmed,COUNT(*) FILTER (WHERE status IN ($$staging$$,$$queued$$,$$uploading$$,$$submitted$$))::integer AS pending,COUNT(*) FILTER (WHERE status=$$failed$$)::integer AS failed,COALESCE(SUM(encrypted_size_bytes) FILTER (WHERE status=$$confirmed$$),0)::bigint AS \"confirmedBytes\",COALESCE(SUM(encrypted_size_bytes) FILTER (WHERE status IN ($$staging$$,$$queued$$,$$uploading$$,$$submitted$$)),0)::bigint AS \"pendingBytes\",MAX(confirmed_at) AS \"lastConfirmedAt\" FROM arweave_storage_jobs WHERE user_id=$1", [user.id]);
+    const arweaveCategories = await query<any>("SELECT CASE WHEN original_content_type LIKE $$image/%$$ THEN $$photo$$ WHEN original_content_type LIKE $$video/%$$ THEN $$video$$ WHEN original_content_type LIKE $$audio/%$$ THEN $$audio$$ ELSE $$document$$ END AS type,COUNT(*)::integer AS count,COALESCE(SUM(encrypted_size_bytes),0)::bigint AS bytes FROM arweave_storage_jobs WHERE user_id=$1 AND status=$$confirmed$$ GROUP BY 1 ORDER BY bytes DESC", [user.id]);
+    return json({ totals: total, albums, arweave: { ...(arweaveSummary[0] || {}), categories: arweaveCategories }, plan: account[0]?.plan || "starter", quotaBytes: Number(account[0]?.quotaBytes || 5368709120), estimatedMonthlyStorageUsd: Number((billableBytes / 1024 ** 3 * Number(process.env.R2_STORAGE_COST_PER_GB || 0.015)).toFixed(2)), estimateOnly: true });
   }
 
   if (route === "account") {

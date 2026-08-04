@@ -15,7 +15,8 @@ import {
   Activity, 
   Lock,
   Download,
-  Info
+  Info,
+  RefreshCw
 } from 'lucide-react';
 
 interface StorageUsageDashboardProps {
@@ -33,127 +34,60 @@ export interface MediaCategoryBreakdown {
   icon: React.ReactNode;
 }
 
-export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
-  memories,
-  totalStorageGB = 50
-}) => {
+export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [selectedViewType, setSelectedViewType] = useState<'donut' | 'progress'>('donut');
+  const [selectedViewType, setSelectedViewType] = useState<"donut" | "progress">("donut");
+  const [storageData, setStorageData] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Compute storage breakdown dynamically based on actual memory items
-  const breakdownData = useMemo(() => {
-    let photosCount = 0;
-    let photosSizeMB = 0;
-
-    let videosCount = 0;
-    let videosSizeMB = 0;
-
-    let audioCount = 0;
-    let audioSizeMB = 0;
-
-    let docsCount = 0;
-    let docsSizeMB = 0;
-
-    let vaultCount = 0;
-    let vaultSizeMB = 0;
-
-    memories.forEach(item => {
-      // Check if video
-      if (item.videoUrl || item.mediaType === 'video') {
-        videosCount += 1;
-        videosSizeMB += 18.5; // Avg 18.5 MB per video
-      } 
-      // Check if audio story
-      else if (item.description?.includes('[Spoken Story Transcription]') || item.title?.toLowerCase().includes('voice') || item.title?.toLowerCase().includes('audio')) {
-        audioCount += 1;
-        audioSizeMB += 4.2; // Avg 4.2 MB per spoken story
-      }
-      // Check if document/legal
-      else if (item.category === 'Legal' || item.mediaType === 'document' || !item.imageUrl) {
-        docsCount += 1;
-        docsSizeMB += 2.8; // Avg 2.8 MB per document
-      } 
-      // Photo/Image
-      else {
-        photosCount += 1;
-        photosSizeMB += 5.4; // Avg 5.4 MB per photo
-      }
-
-      // High security vault extra overhead
-      if (item.encryptionLevel === 'Quantum-Proof' || item.encryptionLevel === 'Level 5 Protected') {
-        vaultCount += 1;
-        vaultSizeMB += 1.2;
-      }
-    });
-
-    // Default minimum demo fallback values so the chart is visually rich even if empty
-    if (photosCount === 0 && videosCount === 0 && docsCount === 0) {
-      photosCount = 12; photosSizeMB = 64.8;
-      videosCount = 4; videosSizeMB = 74.0;
-      audioCount = 6; audioSizeMB = 25.2;
-      docsCount = 8; docsSizeMB = 22.4;
-      vaultCount = 5; vaultSizeMB = 18.6;
+  const loadStorageData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const response = await fetch("/api/media/storage-summary");
+      if (!response.ok) throw new Error("Storage metrics request failed.");
+      setStorageData(await response.json());
+    } catch (error: any) {
+      setLoadError(error?.message || "Unable to load storage metrics.");
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    const totalUsedMB = photosSizeMB + videosSizeMB + audioSizeMB + docsSizeMB + vaultSizeMB;
+  useEffect(() => { void loadStorageData(); }, []);
 
-    const categories: MediaCategoryBreakdown[] = [
-      {
-        label: 'Photos & Visuals',
-        typeKey: 'photo',
-        count: photosCount,
-        sizeMB: Math.round(photosSizeMB * 10) / 10,
-        percentage: Math.round((photosSizeMB / totalUsedMB) * 100) || 0,
-        color: '#DFB260', // Warm Gold
-        icon: <ImageIcon className="w-4 h-4 text-[#F5D77F]" />
-      },
-      {
-        label: 'HD Videos & Recordings',
-        typeKey: 'video',
-        count: videosCount,
-        sizeMB: Math.round(videosSizeMB * 10) / 10,
-        percentage: Math.round((videosSizeMB / totalUsedMB) * 100) || 0,
-        color: '#10B981', // Emerald
-        icon: <Video className="w-4 h-4 text-emerald-400" />
-      },
-      {
-        label: 'Spoken Voice Stories',
-        typeKey: 'audio',
-        count: audioCount,
-        sizeMB: Math.round(audioSizeMB * 10) / 10,
-        percentage: Math.round((audioSizeMB / totalUsedMB) * 100) || 0,
-        color: '#F59E0B', // Amber
-        icon: <Mic className="w-4 h-4 text-amber-400" />
-      },
-      {
-        label: 'Documents & Deeds',
-        typeKey: 'document',
-        count: docsCount,
-        sizeMB: Math.round(docsSizeMB * 10) / 10,
-        percentage: Math.round((docsSizeMB / totalUsedMB) * 100) || 0,
-        color: '#3B82F6', // Blue
-        icon: <FileText className="w-4 h-4 text-blue-400" />
-      },
-      {
-        label: 'Encrypted Vault Proofs',
-        typeKey: 'vault',
-        count: vaultCount,
-        sizeMB: Math.round(vaultSizeMB * 10) / 10,
-        percentage: Math.round((vaultSizeMB / totalUsedMB) * 100) || 0,
-        color: '#8B5CF6', // Purple
-        icon: <Lock className="w-4 h-4 text-purple-400" />
-      }
-    ];
-
+  const breakdownData = useMemo(() => {
+    const source = storageData?.arweave?.categories || [];
+    const settings: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+      photo: { label: "Photos & Visuals", color: "#DFB260", icon: <ImageIcon className="w-4 h-4 text-[#F5D77F]" /> },
+      video: { label: "HD Videos & Recordings", color: "#10B981", icon: <Video className="w-4 h-4 text-emerald-400" /> },
+      audio: { label: "Spoken Voice Stories", color: "#F59E0B", icon: <Mic className="w-4 h-4 text-amber-400" /> },
+      document: { label: "Documents & Other Files", color: "#3B82F6", icon: <FileText className="w-4 h-4 text-blue-400" /> }
+    };
+    const totalBytes = Number(storageData?.arweave?.confirmedBytes || 0);
+    const categories: MediaCategoryBreakdown[] = source.map((row: any) => {
+      const typeKey = String(row.type || "document") as MediaCategoryBreakdown["typeKey"];
+      const config = settings[typeKey] || settings.document;
+      const bytes = Number(row.bytes || 0);
+      return {
+        label: config.label,
+        typeKey,
+        count: Number(row.count || 0),
+        sizeMB: Math.round(bytes / 1024 / 1024 * 100) / 100,
+        percentage: totalBytes ? Math.round(bytes / totalBytes * 100) : 0,
+        color: config.color,
+        icon: config.icon
+      };
+    });
     return {
-      totalUsedMB: Math.round(totalUsedMB * 10) / 10,
-      totalUsedGB: Math.round((totalUsedMB / 1024) * 100) / 100,
-      totalCount: memories.length || (photosCount + videosCount + audioCount + docsCount),
+      totalUsedMB: Math.round(totalBytes / 1024 / 1024 * 100) / 100,
+      totalUsedGB: Math.round(totalBytes / 1024 / 1024 / 1024 * 1000) / 1000,
+      totalCount: Number(storageData?.arweave?.confirmed || 0),
       categories
     };
-  }, [memories]);
+  }, [storageData]);
 
   // Render D3 Donut Chart
   useEffect(() => {
@@ -243,9 +177,6 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
 
   }, [breakdownData]);
 
-  const totalCapacityMB = totalStorageGB * 1024;
-  const overallUsedPercentage = Math.min(100, Math.round((breakdownData.totalUsedMB / totalCapacityMB) * 100 * 100) / 100);
-
   return (
     <div className="cosmic-card-gold p-6 sm:p-8 rounded-3xl space-y-6 relative overflow-hidden shadow-2xl">
       {/* Background Decorative Glow */}
@@ -261,17 +192,18 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
             <h2 className="font-cinzel font-bold text-xl text-[#FFF2A8] flex items-center gap-2">
               <span>Arweave Permaweb Storage Dashboard</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                D3 Analytics
+                Live database
               </span>
             </h2>
             <p className="text-xs text-[#C8B1E4]/90 font-mono">
-              Immutable storage distribution, asset sizes &amp; cryptographic breakdown
+              Confirmed Arweave transactions, encrypted payload sizes, and current queue health
             </p>
           </div>
         </div>
 
         {/* View Switcher */}
         <div className="flex items-center bg-[#0A0514] p-1 rounded-xl border border-[#DFB260]/30 text-xs">
+          <button onClick={loadStorageData} disabled={isLoading} title="Refresh live storage metrics" className="px-3 py-1.5 rounded-lg text-[#C8B1E4] hover:text-[#FFF2A8] disabled:opacity-50"><RefreshCw className={"w-3.5 h-3.5 " + (isLoading ? "animate-spin" : "")} /></button>
           <button
             onClick={() => setSelectedViewType('donut')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
@@ -297,44 +229,28 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
         </div>
       </div>
 
-      {/* Main Storage Overview Stats */}
+      {loadError && <div className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-xs text-rose-200">{loadError} <button onClick={loadStorageData} className="ml-2 underline">Retry</button></div>}
+      {isLoading && <div className="rounded-xl border border-[#DFB260]/30 bg-[#0A0514] p-3 text-xs font-mono text-[#C8B1E4]">Loading authenticated storage records...</div>}
+
+      {/* Real Arweave storage metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-[#0A0514] p-4 rounded-2xl border border-[#DFB260]/30 space-y-1">
-          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Total Vault Used</span>
+        <div className="bg-[#0A0514] p-4 rounded-2xl border border-emerald-500/30 space-y-1">
+          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Confirmed on Arweave</span>
           <div className="flex items-baseline space-x-2">
             <span className="font-cinzel font-bold text-2xl text-[#FFF2A8]">{breakdownData.totalUsedMB} MB</span>
-            <span className="text-xs font-mono text-[#F5D77F]">({breakdownData.totalUsedGB} GB)</span>
+            <span className="text-xs font-mono text-[#F5D77F]">({breakdownData.totalCount} transactions)</span>
           </div>
-          <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>100% Permanently Encrypted on Permaweb</span>
-          </p>
+          <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1"><ShieldCheck className="w-3 h-3" /><span>Database-confirmed permanent payloads only</span></p>
         </div>
-
-        <div className="bg-[#0A0514] p-4 rounded-2xl border border-[#DFB260]/30 space-y-1">
-          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Allocated Perpetual Capacity</span>
-          <div className="flex items-baseline space-x-2">
-            <span className="font-cinzel font-bold text-2xl text-[#FFF2A8]">{totalStorageGB} GB</span>
-            <span className="text-xs font-mono text-[#C8B1E4]/70">({overallUsedPercentage}% used)</span>
-          </div>
-          <div className="w-full bg-[#120B21] h-1.5 rounded-full overflow-hidden border border-[#DFB260]/20 mt-2">
-            <div 
-              className="bg-gradient-to-r from-[#DFB260] to-[#F5D77F] h-full transition-all duration-500" 
-              style={{ width: `${Math.max(2, overallUsedPercentage)}%` }}
-            />
-          </div>
+        <div className="bg-[#0A0514] p-4 rounded-2xl border border-amber-500/30 space-y-1">
+          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Awaiting Confirmation</span>
+          <div className="flex items-baseline space-x-2"><span className="font-cinzel font-bold text-2xl text-[#FFF2A8]">{Number(storageData?.arweave?.pending || 0)}</span><span className="text-xs font-mono text-amber-300">jobs</span></div>
+          <p className="text-[10px] text-[#C8B1E4] font-mono">{Math.round(Number(storageData?.arweave?.pendingBytes || 0) / 1024 / 1024 * 100) / 100} MB staged, queued, uploading, or submitted</p>
         </div>
-
-        <div className="bg-[#0A0514] p-4 rounded-2xl border border-[#DFB260]/30 space-y-1">
-          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Total Stored Assets</span>
-          <div className="flex items-baseline space-x-2">
-            <span className="font-cinzel font-bold text-2xl text-[#FFF2A8]">{breakdownData.totalCount}</span>
-            <span className="text-xs font-mono text-purple-300">Items / Artifacts</span>
-          </div>
-          <p className="text-[10px] text-[#C8B1E4]/80 font-mono flex items-center gap-1">
-            <Database className="w-3 h-3 text-amber-400" />
-            <span>24 Active Node Replications</span>
-          </p>
+        <div className="bg-[#0A0514] p-4 rounded-2xl border border-rose-500/30 space-y-1">
+          <span className="text-[11px] text-[#C8B1E4] font-mono uppercase tracking-wider block">Archive Failures</span>
+          <div className="flex items-baseline space-x-2"><span className="font-cinzel font-bold text-2xl text-[#FFF2A8]">{Number(storageData?.arweave?.failed || 0)}</span><span className="text-xs font-mono text-rose-300">jobs requiring attention</span></div>
+          <p className="text-[10px] text-[#C8B1E4]/80 font-mono flex items-center gap-1"><Database className="w-3 h-3 text-amber-400" /><span>{Number(storageData?.arweave?.jobCount || 0)} total archive job records</span></p>
         </div>
       </div>
 
@@ -407,7 +323,7 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
                       {cat.label}
                     </h4>
                     <span className="text-[10px] text-[#C8B1E4]/70 font-mono block">
-                      {cat.count} {cat.count === 1 ? 'file' : 'files'} stored
+                      {cat.count} {cat.count === 1 ? 'file' : 'files'} confirmed
                     </span>
                   </div>
                 </div>
@@ -439,16 +355,9 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = ({
           <div className="bg-[#120B21]/80 p-3 rounded-xl border border-[#DFB260]/30 flex items-center justify-between text-[11px] text-[#C8B1E4]">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-[#F5D77F]" />
-              <span>Permaweb storage fees fully prepaid in sovereign AR tokens. Zero monthly subscription expiry.</span>
+              <span>Metrics come from authenticated Arweave archive job records. Only confirmed transactions appear in the chart.</span>
             </div>
-            <a 
-              href="https://viewblock.io/arweave" 
-              target="_blank" 
-              rel="noreferrer"
-              className="text-[#F5D77F] hover:underline font-mono text-[10px] shrink-0 ml-2"
-            >
-              Verify Node Tx
-            </a>
+            <button onClick={loadStorageData} className="text-[#F5D77F] hover:underline font-mono text-[10px] shrink-0 ml-2">Refresh records</button>
           </div>
         </div>
 

@@ -32,6 +32,21 @@ test("keeps legacy destinations in a left rail on desktop screens", async ({ pag
   await expect(page.locator("#nav-link-dashboard")).toContainText("Dashboard");
 });
 
+test("shows real Arweave archive metrics on the dashboard", async ({ page }) => {
+  await page.route("**/api/media/storage-summary", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({
+    totals:{activeBytes:9000000,trashBytes:0,imageCount:2,videoCount:1},
+    albums:[],
+    arweave:{jobCount:5,confirmed:3,pending:1,failed:1,confirmedBytes:7340032,pendingBytes:2097152,categories:[{type:"photo",count:2,bytes:4194304},{type:"video",count:1,bytes:3145728}]}
+  }) }));
+  await page.goto("/#storage");
+  await page.locator("#nav-link-dashboard").click();
+  await expect(page.getByRole("heading",{name:"Arweave Permaweb Storage Dashboard"})).toBeVisible();
+  await expect(page.getByText("7 MB",{exact:true}).first()).toBeVisible();
+  await expect(page.getByText("(3 transactions)",{exact:true})).toBeVisible();
+  await expect(page.getByText("Archive Failures").locator("..")).toContainText("1");
+  await expect(page.getByText("Photos & Visuals",{exact:true})).toBeVisible();
+});
+
 test("shows quota warning and storage plan usage", async ({ page }) => {
   await page.route("**/api/media/storage-summary", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({
     totals:{activeBytes:4_900_000_000,trashBytes:0,imageCount:10,videoCount:2},albums:[],plan:"starter",quotaBytes:5_368_709_120,estimatedMonthlyStorageUsd:0.07,
