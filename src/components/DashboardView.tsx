@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ViewMode, MemoryItem, UserProfile, MemorialShrine, Heir } from '../types';
-import { LegacyMilestoneTimeline } from './LegacyMilestoneTimeline';
 import { StorageUsageDashboard } from './StorageUsageDashboard';
 import { 
   Plus, 
@@ -366,14 +365,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* VISUAL LEGACY MILESTONE TIMELINE */}
-      <LegacyMilestoneTimeline 
-        currentUser={currentUser}
-        memoriesCount={memories.length}
-        heirsCount={heirs?.length || 2}
-        onOpenUpload={onOpenUpload}
-        onSelectView={onSelectView}
-      />
 
       {/* D3 Storage Usage Dashboard Component */}
       <StorageUsageDashboard memories={memories} />
