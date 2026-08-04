@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems: { id: ViewMode; label: string; icon: any }[] = [
     { id: 'landing', label: 'Landing', icon: Shield },
     { id: 'dashboard', label: 'Dashboard', icon: Layers },
-    { id: 'imports', label: 'Imports', icon: History },
+    { id: 'imports', label: 'Audit', icon: History },
     { id: 'recycle', label: 'Recycle Bin', icon: Trash2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'account', label: 'Account', icon: Settings },
