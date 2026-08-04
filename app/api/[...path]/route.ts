@@ -292,7 +292,46 @@ export async function GET(request: Request) {
       const user = await authenticatedUser(request);
       if (!user) return json({ error: "Authentication required." }, 401);
       const rows = await query<{ data: any; revision: number }>("SELECT data, revision FROM vault_snapshots WHERE user_id = $1", [user.id]);
-      const data=rows[0]?.data??null;
+      let data=rows[0]?.data??null;
+      if (!data || !Array.isArray(data.memories) || data.memories.length === 0) {
+        const recoverable = await query<any>("SELECT m.id AS \"mediaId\",m.original_name AS name,m.content_type AS \"contentType\",m.size_bytes AS \"sizeBytes\",m.source_provider AS \"sourceProvider\",m.width,m.height,m.duration_ms AS \"durationMs\",m.captured_at AS \"capturedAt\",m.created_at AS \"createdAt\",m.thumbnail_object_key IS NOT NULL AS \"hasThumbnail\",j.album_name AS \"albumName\" FROM media_objects m LEFT JOIN LATERAL (SELECT album_name FROM media_import_jobs WHERE media_object_id=m.id AND album_name IS NOT NULL ORDER BY created_at DESC LIMIT 1) j ON TRUE WHERE m.user_id=$1 AND m.deleted_at IS NULL AND m.status=$$ready$$ ORDER BY COALESCE(m.captured_at,m.created_at) DESC", [user.id]);
+        if (recoverable.length) {
+          const existing = data && typeof data === "object" ? data : {};
+          data = { memories: recoverable.map((item:any) => {
+            const mediaId=String(item.mediaId);
+            const contentType=String(item.contentType||"application/octet-stream");
+            const isVideo=contentType.startsWith("video/");
+            const isImage=contentType.startsWith("image/");
+            const mediaUrl="/api/media/"+encodeURIComponent(mediaId);
+            const thumbnailUrl=item.hasThumbnail?mediaUrl+"/thumbnail":undefined;
+            const capturedAt=item.capturedAt||item.createdAt;
+            return {
+              id:"recovered-"+mediaId,
+              title:String(item.name||"Recovered memory"),
+              category:"Family",
+              date:new Date(capturedAt).toISOString().slice(0,10),
+              location:"Recovered Vault Storage",
+              imageUrl:isImage?mediaUrl:thumbnailUrl,
+              videoUrl:isVideo?mediaUrl:undefined,
+              thumbnailUrl,
+              mediaType:isVideo?"video":isImage?"photo":"document",
+              fileSizeBytes:Number(item.sizeBytes||0),
+              width:item.width||undefined,
+              height:item.height||undefined,
+              durationMs:Number(item.durationMs||0)||undefined,
+              sourceProvider:item.sourceProvider||undefined,
+              sourceCreatedAt:new Date(capturedAt).toISOString(),
+              mediaId,
+              description:"Recovered from durable private media storage after the vault index was unavailable.",
+              encryptionLevel:"Level 5 Protected",
+              archiveStatus:"r2_only",
+              tags:item.albumName?["Recovered","Album"]:["Recovered"],
+              albumName:item.albumName||undefined
+            };
+          }), letters:Array.isArray(existing.letters)?existing.letters:[], memorials:Array.isArray(existing.memorials)?existing.memorials:[], heirs:Array.isArray(existing.heirs)?existing.heirs:[] };
+          await execute("INSERT INTO vault_snapshots(user_id,data) VALUES($1,$2::jsonb) ON CONFLICT(user_id) DO UPDATE SET data=EXCLUDED.data,revision=vault_snapshots.revision+1,updated_at=NOW()", [user.id,JSON.stringify(data)]);
+        }
+      }
       if(data&&Array.isArray(data.memories)){
         const ids=data.memories.map((item:any)=>item.mediaId).filter(Boolean);
         if(ids.length){

@@ -111,10 +111,12 @@ export default function App() {
   });
 
   const [triggerConfig, setTriggerConfig] = useState<InheritanceTriggerConfig>(INITIAL_TRIGGER_CONFIG);
+  const [vaultHydrated, setVaultHydrated] = useState(false);
 
   // Prefer the authenticated server vault, with IndexedDB as an offline fallback.
   useEffect(() => {
     async function hydrateFromVault() {
+      setVaultHydrated(false);
       const isDemoCleared = localStorage.getItem('aeterna_demo_cleared') === 'true';
 
       // 1. Try loading from server persistent storage first
@@ -127,6 +129,7 @@ export default function App() {
             if (Array.isArray(body.data.letters)) setLetters(body.data.letters);
             if (Array.isArray(body.data.heirs)) setHeirs(body.data.heirs);
             if (Array.isArray(body.data.memorials)) setMemorials(body.data.memorials);
+            setVaultHydrated(true);
             return;
           }
         }
@@ -158,13 +161,14 @@ export default function App() {
       if (dbHeirs !== null) {
         setHeirs(dbHeirs);
       }
+      setVaultHydrated(true);
     }
     hydrateFromVault();
   }, [currentUser?.id]);
 
   // Sync authenticated vault state to server whenever vault items are updated
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !vaultHydrated) return;
     const timer = setTimeout(() => {
       fetch('/api/vault/sync', {
         method: 'POST',
@@ -173,7 +177,7 @@ export default function App() {
       }).catch(err => console.warn('Vault server sync notice:', err));
     }, 1000);
     return () => clearTimeout(timer);
-  }, [memories, letters, heirs, memorials, currentUser?.id]);
+  }, [memories, letters, heirs, memorials, currentUser?.id, vaultHydrated]);
 
   // Clear demo content handler
   const handleClearDemoContent = () => {

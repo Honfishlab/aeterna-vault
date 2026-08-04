@@ -32,6 +32,20 @@ test("keeps legacy destinations in a left rail on desktop screens", async ({ pag
   await expect(page.locator("#nav-link-dashboard")).toContainText("Dashboard");
 });
 
+test("does not overwrite the server vault before hydration completes", async ({ page }) => {
+  const syncBodies:any[]=[];
+  const memory={id:"preserved-1",title:"Preserved server memory",category:"Family",date:"2026-08-01",description:"Must survive a slow reload.",encryptionLevel:"Level 5 Protected",tags:["preserved"]};
+  await page.route("**/api/vault/data", async route => { await new Promise(resolve => setTimeout(resolve,1500)); await route.fulfill({contentType:"application/json",body:JSON.stringify({data:{memories:[memory],letters:[],memorials:[],heirs:[]},revision:8})}); });
+  await page.route("**/api/vault/sync", async route => { syncBodies.push(route.request().postDataJSON()); await route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,revision:9})}); });
+  await page.goto("/#search");
+  await page.waitForTimeout(1200);
+  expect(syncBodies).toHaveLength(0);
+  await expect(page.getByText("Preserved server memory")).toBeVisible({timeout:5000});
+  await page.waitForTimeout(1200);
+  expect(syncBodies.length).toBeGreaterThan(0);
+  expect(syncBodies.every(body => body.memories?.some((item:any) => item.id === "preserved-1"))).toBe(true);
+});
+
 test("shows real Arweave archive metrics on the dashboard", async ({ page }) => {
   await page.route("**/api/media/storage-summary", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({
     totals:{activeBytes:9000000,trashBytes:0,imageCount:2,videoCount:1},
