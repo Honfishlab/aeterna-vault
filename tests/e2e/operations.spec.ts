@@ -10,22 +10,26 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/notifications", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({notifications:[],unread:0}) }));
 });
 
-test("keeps legacy destinations in a left rail on desktop screens", async ({ page }) => {
+test("keeps legacy, vault, and administrative destinations in the desktop left rail", async ({ page }) => {
   await page.setViewportSize({width:1440,height:900});
   await page.goto("/#storage");
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
   await expect(page.locator("#side-nav-legacy")).toBeVisible();
   await expect(page.locator("#side-nav-locker")).toBeVisible();
-  await expect(page.locator("#admin-nav-account")).toBeVisible();
+  await expect(page.locator("#vault-nav-imports")).toBeVisible();
+  await expect(page.locator("#vault-nav-storage")).toBeVisible();
+  await expect(page.locator("#vault-nav-account")).toBeVisible();
+  await expect(page.locator("#vault-nav-wallet")).toBeVisible();
   await expect(page.locator("#admin-nav-pricing")).toBeVisible();
   await expect(page.locator("#admin-nav-recycle")).toBeVisible();
-  const railBox=await page.getByRole("navigation",{name:"Legacy sections"}).boundingBox();
-  expect(railBox?.y).toBeGreaterThan(250);
-  expect(railBox?.y).toBeLessThan(450);
+  await expect(page.getByRole("navigation",{name:"Vault sections"})).toBeVisible();
   await expect(page.locator("#nav-link-memorials")).toBeHidden();
+  await expect(page.locator("#nav-link-imports")).toBeHidden();
+  await expect(page.locator("#nav-link-storage")).toBeHidden();
   await expect(page.locator("#nav-link-account")).toBeHidden();
   await expect(page.locator("#nav-link-pricing")).toBeHidden();
   await expect(page.locator("#nav-link-recycle")).toBeHidden();
+  await expect(page.locator("#btn-wallet-connect")).toBeHidden();
   await page.setViewportSize({width:1800,height:900});
   await expect(page.locator("#side-nav-memorials")).toBeVisible();
   await expect(page.locator("#nav-link-memorials")).toBeHidden();

@@ -78,8 +78,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'empty', label: 'New Vault', icon: PlusCircle },
   ];
   const sideNavIds = new Set<ViewMode>(['legacy', 'memorials', 'locker']);
-  const adminNavIds = new Set<ViewMode>(['account', 'pricing', 'recycle']);
+  const vaultNavIds = new Set<ViewMode>(['imports', 'storage', 'account']);
+  const adminNavIds = new Set<ViewMode>(['pricing', 'recycle']);
   const sideNavItems = navItems.filter(item => sideNavIds.has(item.id));
+  const vaultNavItems = navItems.filter(item => vaultNavIds.has(item.id));
   const adminNavItems = navItems.filter(item => adminNavIds.has(item.id));
 
   return (
@@ -128,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden md:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isSideItem = sideNavIds.has(item.id) || adminNavIds.has(item.id);
+              const isSideItem = sideNavIds.has(item.id) || vaultNavIds.has(item.id) || adminNavIds.has(item.id);
               const isActive = currentView === item.id;
               return (
                 <button
@@ -193,7 +195,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="btn-wallet-connect"
               onClick={onOpenWallet}
-              className={`flex items-center space-x-2 px-3 py-1.5 text-xs rounded-xl border transition-all cursor-pointer ${
+              className={`flex lg:hidden items-center space-x-2 px-3 py-1.5 text-xs rounded-xl border transition-all cursor-pointer ${
                 walletState.isConnected
                   ? 'bg-[#1A0C33] border-[#DFB260]/40 text-[#F5D77F] hover:bg-[#28134D]'
                   : 'bg-gradient-to-r from-[#7353A0] to-[#381B68] border-[#DFB260]/30 text-white hover:border-[#DFB260]/60'
@@ -275,6 +277,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Icon className={'h-4 w-4 shrink-0 ' + (isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]')}/><span>{item.label}</span>
             </button>;
           })}
+        </nav>
+        <nav aria-label="Vault sections" className="flex flex-col gap-2 rounded-2xl border border-[#DFB260]/50 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
+          <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#F5D77F]">Vault</p>
+          {vaultNavItems.map(item => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            return <button key={item.id} id={'vault-nav-' + item.id} onClick={() => onSelectView(item.id)} title={item.label} className={'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ' + (isActive ? 'border-[#DFB260]/60 bg-[#DFB260]/20 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#DFB260]/40 hover:bg-[#1A0C33] hover:text-[#FFF2A8]')}>
+              <Icon className={'h-4 w-4 shrink-0 ' + (isActive ? 'text-[#F5D77F]' : 'text-[#C8B1E4]')}/><span>{item.label}</span>
+            </button>;
+          })}
+          <button id="vault-nav-wallet" onClick={onOpenWallet} title="Arweave Web Wallet" className={'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[11px] font-semibold transition-all ' + (walletState.isConnected ? 'border-emerald-400/40 bg-emerald-500/10 text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:border-[#DFB260]/40 hover:bg-[#1A0C33] hover:text-[#FFF2A8]')}>
+            <Wallet className={"h-4 w-4 shrink-0 " + (walletState.isConnected ? "text-emerald-400" : "text-[#C8B1E4]")}/><span>Arweave Web Wallet</span>
+          </button>
         </nav>
         <nav aria-label="Administrative sections" className="flex flex-col gap-2 rounded-2xl border border-[#7353A0]/50 bg-[#120B21]/95 p-2 shadow-2xl backdrop-blur-xl">
           <p className="px-2 pb-1 text-[9px] font-mono uppercase tracking-[0.18em] text-[#C8B1E4]">Administrative</p>
