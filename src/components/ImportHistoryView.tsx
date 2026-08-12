@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Archive, Loader2, Lock, RefreshCw, X } from "lucide-react";
+import { queuePermanentArchive } from "../lib/permanentArchive";
 
 interface AuditRow {
   id: string;
@@ -39,6 +40,11 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archivePassphrase, setArchivePassphrase] = useState("");
+  const [archiveError, setArchiveError] = useState("");
+  const [archiving, setArchiving] = useState(false);
+  const [archiveProgress, setArchiveProgress] = useState({ current: 0, total: 0, item: "", percent: 0 });
 
   const load = async () => {
     setLoading(true);
@@ -60,6 +66,31 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
     permanent: rows.filter(row => row.archiveStatus === "confirmed" && Boolean(row.arweaveId)).length
   }), [rows]);
 
+  const archiveEligibleRows = useMemo(() => rows.filter(row =>
+    Boolean(row.mediaId) && Boolean(row.r2UploadedAt) && row.status === "complete" && !row.archiveStatus &&
+    Number(row.bytesTotal || 0) > 0 && Number(row.bytesTotal || 0) < 10 * 1024 * 1024 - 32
+  ), [rows]);
+
+  const archiveR2Items = async () => {
+    if (archivePassphrase.length < 12) { setArchiveError("Use a permanent-vault passphrase of at least 12 characters."); return; }
+    if (!archiveEligibleRows.length) { setArchiveError("There are no eligible R2-only files to archive."); return; }
+    if (!window.confirm(`Encrypt and permanently archive ${archiveEligibleRows.length} R2-only files to Arweave? Arweave transactions and fees cannot be reversed.`)) return;
+    setArchiving(true); setArchiveError(""); setArchiveProgress({ current: 0, total: archiveEligibleRows.length, item: "", percent: 0 });
+    try {
+      for (let index = 0; index < archiveEligibleRows.length; index += 1) {
+        const row = archiveEligibleRows[index];
+        setArchiveProgress({ current: index + 1, total: archiveEligibleRows.length, item: row.name, percent: 0 });
+        const response = await fetch(`/api/media/${encodeURIComponent(String(row.mediaId))}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Could not load ${row.name} from private R2 storage.`);
+        const blob = await response.blob();
+        const file = new File([blob], row.name, { type: row.contentType || row.mimeType || blob.type || "application/octet-stream" });
+        await queuePermanentArchive(file, archivePassphrase, percent => setArchiveProgress({ current: index + 1, total: archiveEligibleRows.length, item: row.name, percent }), String(row.mediaId), row.r2AlbumName || row.albumName || undefined);
+      }
+      setArchivePassphrase(""); setArchiveOpen(false); await load();
+    } catch (reason) { setArchiveError(reason instanceof Error ? reason.message : "R2 archive queueing failed."); await load(); }
+    finally { setArchiving(false); }
+  };
+
   return (
     <section className="space-y-5 pb-16">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[#DFB260]/40 pb-4">
@@ -68,12 +99,20 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
           <h1 className="mt-1 font-cinzel text-3xl font-bold text-[#FFF2A8]">Audit</h1>
           <p className="mt-1 text-xs text-[#C8B1E4]">{totals.files} files · {totals.r2} uploaded to R2 · {totals.permanent} permanently archived</p>
         </div>
-        <button onClick={load} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#DFB260]/50 px-3 py-2 text-xs text-[#FFF2A8] disabled:opacity-50">
-          <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} /> Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => { setArchiveOpen(true); setArchiveError(""); }} disabled={loading || !archiveEligibleRows.length} className="gold-filled-btn flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40"><Archive className="h-4 w-4" /> Archive R2 items ({archiveEligibleRows.length})</button>
+          <button onClick={load} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#DFB260]/50 px-3 py-2 text-xs text-[#FFF2A8] disabled:opacity-50"><RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} /> Refresh</button>
+        </div>
       </header>
 
       {loadError && <div className="rounded-lg border border-rose-500/50 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{loadError}</div>}
+
+      {archiveOpen && <section className="rounded-xl border border-[#DFB260]/45 bg-[#120821]/95 p-4 shadow-2xl">
+        <div className="flex items-start justify-between gap-4"><div><h2 className="flex items-center gap-2 font-cinzel text-lg text-[#FFF2A8]"><Lock className="h-4 w-4" /> Archive R2 files to Arweave</h2><p className="mt-1 text-xs text-[#C8B1E4]">{archiveEligibleRows.length} ready R2-only files are eligible. Files are encrypted in this browser before permanent storage.</p></div><button aria-label="Close archive panel" onClick={() => setArchiveOpen(false)} disabled={archiving} className="text-[#C8B1E4] hover:text-white disabled:opacity-30"><X className="h-5 w-5" /></button></div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row"><input type="password" value={archivePassphrase} onChange={event => setArchivePassphrase(event.target.value)} disabled={archiving} placeholder="Permanent-vault passphrase (12+ characters)" className="min-w-0 flex-1 rounded-lg border border-[#DFB260]/40 bg-[#080411] px-3 py-2.5 text-sm text-[#FFF2A8] outline-none focus:border-[#F5D77F]" /><button onClick={archiveR2Items} disabled={archiving || archivePassphrase.length < 12} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-2.5 text-xs disabled:opacity-30">{archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />} Encrypt &amp; queue all</button></div>
+        {archiving && <div className="mt-3 text-xs text-[#FFF2A8]"><div className="flex justify-between gap-3"><span className="truncate">{archiveProgress.current} of {archiveProgress.total}: {archiveProgress.item}</span><span>{archiveProgress.percent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40"><div className="h-full bg-gradient-to-r from-[#8B5CF6] to-[#F5D77F] transition-[width]" style={{ width: `${archiveProgress.percent}%` }} /></div><p className="mt-2 text-[10px] text-amber-200">Keep this window open while browser encryption and staging complete.</p></div>}
+        {archiveError && <p role="alert" className="mt-3 text-xs text-rose-300">{archiveError}</p>}
+      </section>}
 
       <div className="overflow-x-auto rounded-lg border border-[#DFB260]/35 bg-[#0A0514]/90">
         <table className="w-full min-w-[1480px] border-collapse text-left text-xs">

@@ -6,9 +6,24 @@ test.beforeEach(async ({ page }) => {
     body: JSON.stringify({ rows: [
       { id:"done",name:"family.mp4",mediaId:"media-done",hasThumbnail:true,r2AlbumName:"Family Reunion",arweaveAlbumName:"Family Reunion",contentType:"video/mp4",status:"complete",processingStatus:"ready",archiveStatus:"confirmed",arweaveId:"abcdefghijklmnopqrstuvwxyz1234567890ABCDEFG",bytesTotal:18874368,r2UploadedAt:"2026-07-27T00:05:00Z",permanentArchiveDate:"2026-07-27T00:10:00Z" },
       { id:"working",name:"reunion.jpg",mediaId:"media-working",r2AlbumName:"Family Reunion",arweaveAlbumName:"Family Reunion",contentType:"image/jpeg",status:"complete",processingStatus:"ready",archiveStatus:"submitted",bytesTotal:2274688,r2UploadedAt:"2026-07-27T01:05:00Z",permanentArchiveDate:null },
-      { id:"failed",name:"legacy.mov",mediaId:null,r2AlbumName:null,arweaveAlbumName:null,contentType:"video/quicktime",status:"failed",archiveStatus:null,error:"Provider connection interrupted.",bytesTotal:45000000,r2UploadedAt:null,permanentArchiveDate:null }
+      { id:"failed",name:"legacy.mov",mediaId:null,r2AlbumName:null,arweaveAlbumName:null,contentType:"video/quicktime",status:"failed",archiveStatus:null,error:"Provider connection interrupted.",bytesTotal:45000000,r2UploadedAt:null,permanentArchiveDate:null },
+      { id:"ready",name:"portrait.jpg",mediaId:"media-ready",r2AlbumName:"Portraits",arweaveAlbumName:null,contentType:"image/jpeg",status:"complete",processingStatus:"ready",archiveStatus:null,bytesTotal:524288,r2UploadedAt:"2026-07-27T02:05:00Z",permanentArchiveDate:null }
     ] }),
   }));
+});
+
+test("queues eligible R2-only files for encrypted Arweave archival", async ({ page }) => {
+  await page.route("**/api/media/media-ready", route => route.fulfill({ contentType:"image/jpeg", body:"test-image" }));
+  await page.route("**/api/arweave/archive/presign", route => route.fulfill({ contentType:"application/json", body:JSON.stringify({ jobId:"archive-job", uploadUrl:"http://127.0.0.1:4173/mock-r2-upload" }) }));
+  await page.route("**/mock-r2-upload", route => route.fulfill({ status:200 }));
+  await page.route("**/api/arweave/archive/complete", route => route.fulfill({ contentType:"application/json", body:JSON.stringify({ success:true,jobId:"archive-job" }) }));
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("/#imports");
+  await page.getByRole("button", { name:"Archive R2 items (1)" }).click();
+  await page.getByPlaceholder("Permanent-vault passphrase (12+ characters)").fill("a-secure-family-passphrase");
+  await page.getByRole("button", { name:"Encrypt & queue all" }).click();
+  await expect(page.getByText("1 of 1: portrait.jpg")).toBeVisible();
+  await expect(page.getByRole("button", { name:"Archive R2 items (1)" })).toBeVisible();
 });
 
 test("shows the import audit as a plain file ledger", async ({ page }) => {
