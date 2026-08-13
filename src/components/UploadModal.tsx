@@ -44,6 +44,7 @@ interface UploadModalProps {
   onClose: () => void;
   onAddMemory: (memory: MemoryItem | MemoryItem[]) => void;
   onOpenVideoRecorder?: () => void;
+  onViewFiles?: (albumName?: string) => void;
 }
 
 export interface AlbumFileItem {
@@ -69,6 +70,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   onClose,
   onAddMemory,
   onOpenVideoRecorder,
+  onViewFiles,
 }) => {
   // Upload mode: 'single' or 'album'
   const [uploadMode, setUploadMode] = useState<'single' | 'album'>('single');
@@ -538,6 +540,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         }
         setArchiveProgress(90);
         setArchiveStep(3);
+        setArchiveQueueResult({
+          queued: archiveStatus === 'queued' ? 1 : 0,
+          failed: archiveStatus === 'failed' ? 1 : 0,
+          privateOnly: archiveStatus === 'r2_only' ? 1 : 0,
+        });
 
         setTimeout(() => {
           setArchiveProgress(100);
@@ -706,6 +713,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setAlbumFiles([]);
     setPastedUrlInput("");
     onClose();
+  };
+
+  const handleViewSavedFiles = () => {
+    const albumName = uploadMode === 'album' ? title : undefined;
+    handleFinishModal();
+    onViewFiles?.(albumName);
   };
 
   const totalAlbumSizeBytes = albumFiles.reduce((acc, curr) => acc + (curr.size || 0), 0);
@@ -1451,15 +1464,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           </div>
 
           <div>
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#DFB260]/20 text-[#FFF2A8] border border-[#DFB260]/40 text-[10px] font-mono font-semibold uppercase mb-2">
-              <Loader2 className="w-3 h-3 animate-spin text-[#F5D77F]" />
-              <span>Secure storage in progress</span>
+            <div className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full border text-[10px] font-semibold uppercase mb-2 ${archiveProgress === 100 ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/35' : 'bg-[#DFB260]/20 text-[#FFF2A8] border-[#DFB260]/40'}`}>
+              {archiveProgress === 100 ? <CheckCircle2 className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin text-[#F5D77F]" />}
+              <span>{archiveProgress === 100 ? 'Saved to your vault' : 'Secure storage in progress'}</span>
             </div>
             <h3 className="font-cinzel font-bold text-3xl text-[#FFF2A8]">
-              {uploadMode === 'album' ? 'Saving Album Collection' : 'Saving Memory'}
+              {archiveProgress === 100
+                ? (uploadMode === 'album' ? `${albumFiles.length || 1} files are ready` : 'Your memory is ready')
+                : (uploadMode === 'album' ? 'Saving Album Collection' : 'Saving Memory')}
             </h3>
             <p className="text-xs text-[#C8B1E4]/80 mt-1 font-medium">
-              {archiveStatusText || 'Uploading the operational copy and queueing any requested permanent archive.'}
+              {archiveProgress === 100
+                ? (uploadMode === 'album' ? `Find them in Memories → Albums → ${title}.` : 'Find it at the top of Memories under All memories.')
+                : (archiveStatusText || 'Uploading the operational copy and queueing any requested permanent archive.')}
             </p>
           </div>
 
@@ -1493,9 +1510,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           </div>
 
-          <div className="text-[11px] text-[#FFF2A8] font-mono bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">
-            A real transaction ID appears only after the background worker submits the encrypted archive. Files without an archival passphrase remain private in R2.
-          </div>
+          {archiveProgress === 100 ? <div className="rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-4 text-left text-xs"><p className="font-bold text-[#FFF2A8]">What happens next?</p><p className="mt-2 leading-5 text-[#C8B1E4]">Your files are saved privately and can be viewed now. Permanent archiving is separate: {archiveQueueResult.queued > 0 ? `${archiveQueueResult.queued} ${archiveQueueResult.queued === 1 ? 'file is' : 'files are'} queued, and status will appear in Vault Security.` : 'nothing was sent to Arweave. You can choose that later in Vault Security.'}</p></div> : <div className="text-[11px] text-[#FFF2A8] bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">You can close this window while storage finishes. Your files will appear in Memories when complete.</div>}
 
           {archiveProgress < 100 ? (
             <button
@@ -1505,12 +1520,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               Run in Background
             </button>
           ) : (
-            <button
-              onClick={handleFinishModal}
-              className="gold-filled-btn w-full py-3 text-xs cursor-pointer font-bold uppercase tracking-wider"
-            >
-              {archiveQueueResult.queued > 0 ? `✓ ${archiveQueueResult.queued} Arweave ${archiveQueueResult.queued === 1 ? "job" : "jobs"} queued` : "Album saved privately — no Arweave jobs"}
-            </button>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <button onClick={handleViewSavedFiles} className="gold-filled-btn w-full py-3 text-xs cursor-pointer font-bold">
+                {uploadMode === 'album' ? `View “${title}” album` : 'View my memory'}
+              </button>
+              <button onClick={handleFinishModal} className="gold-beveled-btn px-5 py-3 text-xs text-[#FFF2A8] font-semibold cursor-pointer">Done</button>
+            </div>
           )}
 
         </div>

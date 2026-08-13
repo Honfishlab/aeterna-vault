@@ -618,6 +618,10 @@ export default function App() {
         onClose={() => setUploadModalOpen(false)}
         onAddMemory={handleAddMemory}
         onOpenVideoRecorder={() => setVideoRecorderOpen(true)}
+        onViewFiles={(albumName) => {
+          setSearchQuery(albumName || '');
+          setCurrentView('search');
+        }}
       />
 
       <VideoRecorderModal
