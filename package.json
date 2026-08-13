@@ -9,8 +9,10 @@
     "start": "vinext start",
     "clean": "rm -rf dist .vinext .vite",
     "lint": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
     "db:migrate": "node scripts/migrate.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check": "npm run lint && npm run test:unit && npm run test:e2e && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",

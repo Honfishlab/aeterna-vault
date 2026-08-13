@@ -1,20 +1,12 @@
 import { execute, query } from "./db";
+import { sha256, toBase64Url } from "./authPrimitives";
 
-function base64Url(bytes: Uint8Array) {
-  let value = "";
-  bytes.forEach(byte => { value += String.fromCharCode(byte); });
-  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export async function tokenHash(value: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return base64Url(new Uint8Array(digest));
-}
+export const tokenHash = sha256;
 
 export async function issueAccountToken(userId: string, purpose: "verify_email" | "reset_password", hours = 1) {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  const token = base64Url(bytes);
+  const token = toBase64Url(bytes);
   await execute("DELETE FROM account_tokens WHERE user_id=$1 AND purpose=$2 AND used_at IS NULL", [userId, purpose]);
   await execute("INSERT INTO account_tokens(id,user_id,token_hash,purpose,expires_at) VALUES($1,$2,$3,$4,NOW()+($5*INTERVAL $$1 hour$$))", [crypto.randomUUID(), userId, await tokenHash(token), purpose, hours]);
   return token;
