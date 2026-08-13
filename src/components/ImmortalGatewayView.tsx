@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Download, ExternalLink, FileCheck, FolderArchive, Globe, KeyRound, LayoutDashboard, ListChecks, Loader2, Lock, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Heir, LegacyLetter, MemoryItem } from "../types";
-import { queuePermanentArchive, verifyAndDecryptArchive } from "../lib/permanentArchive";
+import { MAX_PERMANENT_ARCHIVE_BYTES, queuePermanentArchive, verifyAndDecryptArchive } from "../lib/permanentArchive";
 import { getArchiveMasterPassphrase } from "../lib/archiveMasterSession";
 import { PassphraseRecoveryVault } from "./PassphraseRecoveryVault";
 import { ArchiveMasterSecurity } from "./ArchiveMasterSecurity";
@@ -255,7 +255,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const archiveEligibleAlbumItems = async () => {
     if (!selectedAlbum) return;
     if (albumPassphrase.length < 12) { setError("Use an archival passphrase of at least 12 characters."); return; }
-    const eligible=selectedAlbum.items.filter(item=>item.archiveStatus==="r2_only"&&item.mediaStatus==="ready"&&item.sizeBytes>0&&item.sizeBytes<10*1024*1024-32);
+    const eligible=selectedAlbum.items.filter(item=>item.archiveStatus==="r2_only"&&item.mediaStatus==="ready"&&item.sizeBytes>0&&item.sizeBytes<=MAX_PERMANENT_ARCHIVE_BYTES);
     if (!eligible.length) { setError("This album has no eligible R2-only items to queue."); return; }
     if (!window.confirm(`Permanently archive ${eligible.length} eligible items from “${selectedAlbum.albumName}” to Arweave? This cannot be undone.`)) return;
     setBulkArchiving(true); setError(""); setBulkProgress({current:0,total:eligible.length,item:"",percent:0});
@@ -358,19 +358,19 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
 
           {selectedAlbum.eligibleCount>0&&<div className="rounded-2xl border border-[#DFB260]/30 bg-[#120B21]/70 p-4">
             <h3 className="font-cinzel text-sm text-[#FFF2A8]">Queue eligible album items</h3>
-            <p className="mt-1 text-xs text-[#C8B1E4]">Files under 10 MB are fetched privately, encrypted locally one at a time, and staged for the Arweave worker. Aeterna never stores this passphrase.</p>
+            <p className="mt-1 text-xs text-[#C8B1E4]">Legacy R2-only files up to 100 MB are fetched privately, encrypted locally one at a time, and staged for the Arweave worker. New uploads enter this flow automatically. Aeterna never stores this passphrase.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]"><input type="password" value={albumPassphrase} onChange={event=>setAlbumPassphrase(event.target.value)} disabled={bulkArchiving} placeholder="Album archival passphrase (12+ characters)" className="rounded-xl border border-[#DFB260]/40 bg-[#0B0712] p-3 text-sm text-[#FFF2A8]"/><button onClick={archiveEligibleAlbumItems} disabled={bulkArchiving||albumPassphrase.length<12} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-3 text-xs disabled:opacity-30">{bulkArchiving?<Loader2 className="h-4 w-4 animate-spin"/>:<Lock className="h-4 w-4"/>}Encrypt & queue {selectedAlbum.eligibleCount} items</button></div>
           </div>}
 
           {bulkArchiving&&<div className="rounded-2xl border border-amber-300/30 bg-amber-500/10 p-4"><div className="flex justify-between gap-3 text-xs text-[#FFF2A8]"><span className="truncate">Item {bulkProgress.current} of {bulkProgress.total}: {bulkProgress.item}</span><span>{bulkProgress.percent}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40"><div className="h-full bg-[#F5D77F] transition-all" style={{width:`${bulkProgress.percent}%`}}/></div><p className="mt-2 text-[10px] text-[#C8B1E4]">Keep this page open while browser encryption and staging are in progress. Arweave submission continues in the background afterward.</p></div>}
 
-          <div className="max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-[#DFB260]/20 p-3">{selectedAlbum.items.map(item=><div key={item.mediaId} className="flex items-center justify-between gap-3 rounded-xl bg-[#120B21] p-3 text-xs"><span className="min-w-0"><strong className="block truncate text-[#FFF2A8]">{item.name}</strong><span className="text-[10px] text-[#C8B1E4]">{bytes(item.sizeBytes)}</span></span><span className={item.archiveStatus==="confirmed"?"text-emerald-300":item.archiveStatus==="failed"?"text-rose-300":item.archiveStatus==="r2_only"?"text-[#C8B1E4]":"text-amber-200"}>{item.archiveStatus==="r2_only"&&item.sizeBytes>=10*1024*1024-32?"over 10 MB":item.archiveStatus.replace("_"," ")}</span></div>)}</div>
+          <div className="max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-[#DFB260]/20 p-3">{selectedAlbum.items.map(item=><div key={item.mediaId} className="flex items-center justify-between gap-3 rounded-xl bg-[#120B21] p-3 text-xs"><span className="min-w-0"><strong className="block truncate text-[#FFF2A8]">{item.name}</strong><span className="text-[10px] text-[#C8B1E4]">{bytes(item.sizeBytes)}</span></span><span className={item.archiveStatus==="confirmed"?"text-emerald-300":item.archiveStatus==="failed"?"text-rose-300":item.archiveStatus==="r2_only"?"text-[#C8B1E4]":"text-amber-200"}>{item.archiveStatus==="r2_only"&&item.sizeBytes>=100*1024*1024-32?"over 100 MB":item.archiveStatus.replace("_"," ")}</span></div>)}</div>
 
           <div className="border-t border-[#DFB260]/20 pt-4">
             <div className="mb-4 rounded-2xl border border-amber-300/30 bg-amber-500/10 p-4"><h3 className="font-bold text-amber-100">Review what becomes public and permanent</h3><div className="mt-3 grid gap-2 text-xs text-amber-50 sm:grid-cols-2"><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>Album title and filenames</p><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>File types and transaction identifiers</p><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>Encrypted payload metadata</p><p className="text-emerald-200"><Lock className="mr-1 inline h-4 w-4"/>Passphrases and original readable files stay private</p></div><p className="mt-3 text-xs text-amber-100">This album contains {selectedAlbum.itemCount} items. Publishing cannot be undone; future updates create another permanent version.</p></div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input value={collectionTitle} onChange={event=>setCollectionTitle(event.target.value)} maxLength={100} className="rounded-xl border border-[#DFB260]/40 bg-[#120B21] p-3 text-sm text-[#FFF2A8]" placeholder="Permanent collection title"/><button onClick={publishCollection} disabled={publishing||!acknowledgePermanent||!albumReady} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-3 text-xs disabled:opacity-30">{publishing?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}Publish album viewer to Arweave</button></div>
             <label className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100"><input aria-label="I understand the collection title" type="checkbox" checked={acknowledgePermanent} onChange={event=>setAcknowledgePermanent(event.target.checked)} className="mt-0.5"/><span>I understand the album title, filenames, transaction IDs, MIME types, and encrypted payload metadata will become public and permanent. Passphrases and plaintext are never published.</span></label>
-            {!albumReady&&<p className="mt-3 text-xs text-amber-200">Publishing unlocks when every album item is confirmed on Arweave. Items over the current 10 MB direct-upload limit remain ineligible.</p>}
+            {!albumReady&&<p className="mt-3 text-xs text-amber-200">Publishing unlocks when every album item is confirmed on Arweave. Legacy items larger than 100 MB require a future segmented archive migration.</p>}
           </div>
         </div>}
         {!selectedAlbum&&<p className="mt-4 rounded-xl bg-amber-500/10 p-4 text-xs text-amber-100">No linked vault album is selected. Albums require media stored in the vault.</p>}

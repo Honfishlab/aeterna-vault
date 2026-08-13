@@ -88,6 +88,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [people, setPeople] = useState('Wayne, Clara Pendelton');
   const [encryptionLevel, setEncryptionLevel] = useState<'Standard' | 'Vault Level 3' | 'Level 5 Protected' | 'Quantum-Proof'>('Level 5 Protected');
   const [archivalPassphrase, setArchivalPassphrase] = useState(() => getArchiveMasterPassphrase());
+  const [securityError, setSecurityError] = useState('');
+  const securityInputRef = useRef<HTMLInputElement | null>(null);
 
   // AI Auto-Tagging state & Real-time Progress Indicator
   const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
@@ -482,6 +484,20 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   const handleStartArchiving = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (archivalPassphrase.length < 12) {
+      setSecurityError('Enter your Vault Security passphrase to encrypt every file for permanent Arweave storage.');
+      securityInputRef.current?.focus();
+      return;
+    }
+    setSecurityError('');
+    if (uploadMode === 'single' && !selectedFile) {
+      setSecurityError('Choose a local file so Aeterna can encrypt and store the original permanently.');
+      return;
+    }
+    if (uploadMode === 'album' && !albumFiles.length) {
+      setSecurityError('Choose or import at least one file before saving the album permanently.');
+      return;
+    }
     if (uploadMode === 'album') {
       const activityResponse = await fetch('/api/import-jobs');
       if (activityResponse.ok) {
@@ -491,7 +507,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       }
     }
     if (!title) return;
-    if (archivalPassphrase.length >= 12) setArchiveMasterPassphrase(archivalPassphrase);
+    setArchiveMasterPassphrase(archivalPassphrase);
 
     setIsArchiving(true);
     setArchiveProgress(5);
@@ -522,27 +538,27 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           storedMediaUrl = stored?.mediaUrl || null;
           storedMediaId = stored?.mediaId;
         }
+        if (!storedMediaId) throw new Error('The operational upload could not be verified, so permanent storage was not started.');
         setArchiveStatusText('Encrypting single memory payload...');
         const contentType = selectedFile ? selectedFile.type : 'image/jpeg';
 
         setArchiveProgress(35);
 
-        if (selectedFile && storedMediaId && archivalPassphrase.length >= 12) {
+        if (selectedFile && storedMediaId) {
           setArchiveStatusText('Encrypting and queueing permanent archive...');
           try {
             const archive = await queuePermanentArchive(selectedFile, archivalPassphrase, value => setArchiveProgress(35 + Math.round(value * 0.55)), storedMediaId);
             archiveJobId = archive.jobId;
             archiveStatus = 'queued';
           } catch (error) {
-            archiveStatus = 'failed';
-            archiveError = error instanceof Error ? error.message : 'Permanent archive queueing failed.';
+            throw new Error(error instanceof Error ? error.message : 'Permanent archive queueing failed.');
           }
         }
         setArchiveProgress(90);
         setArchiveStep(3);
         setArchiveQueueResult({
           queued: archiveStatus === 'queued' ? 1 : 0,
-          failed: archiveStatus === 'failed' ? 1 : 0,
+          failed: 0,
           privateOnly: archiveStatus === 'r2_only' ? 1 : 0,
         });
 
@@ -585,14 +601,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       } else {
         // ALBUM BATCH MODE
         setArchiveStatusText(`Packaging album items for "${title}"...`);
-        const itemsToProcess = albumFiles.length > 0 ? albumFiles : [
-          {
-            id: 'default-1',
-            previewUrl: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800',
-            name: 'Album Cover Photo',
-            size: 2400000
-          }
-        ];
+        const itemsToProcess = albumFiles;
 
         const createdMemories: MemoryItem[] = [];
         const totalItems = itemsToProcess.length;
@@ -621,7 +630,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             ? title
             : `${title} (${idx + 1}/${totalItems}) - ${item.name.replace(/\.[^/.]+$/, "")}`;
 
-          if (storedMediaId && archivalPassphrase.length >= 12) {
+          if (storedMediaId) {
             setArchiveStatusText(`Preparing permanent archive ${idx + 1} of ${totalItems}...`);
             try {
               let archiveFile=item.file;
@@ -635,8 +644,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               archiveJobId=archive.jobId;
               archiveStatus="queued";
             } catch (error) {
-              archiveStatus="failed";
-              archiveError=error instanceof Error?error.message:"Permanent archive queueing failed.";
+              throw new Error(error instanceof Error?error.message:"Permanent archive queueing failed.");
             }
           }
           const peopleArr = people.split(',').map(p => p.trim()).filter(Boolean);
@@ -683,7 +691,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         setArchiveQueueResult({queued:queuedCount,failed:failedCount,privateOnly:privateOnlyCount});
         setArchiveStep(3);
         setArchiveProgress(95);
-        setArchiveStatusText(queuedCount?`Album "${title}" saved; ${queuedCount} permanent archive ${queuedCount===1?"job is":"jobs are"} queued${failedCount?` and ${failedCount} failed to queue`:""}.`:`Album "${title}" saved privately; no Arweave archive jobs were queued.`);
+        if (queuedCount !== createdMemories.length) throw new Error('Permanent storage could not be queued for every album item.');
+        setArchiveStatusText(`All ${queuedCount} ${queuedCount===1?'item is':'items are'} encrypted and queued for permanent Arweave storage.`);
 
         setTimeout(() => {
           setArchiveProgress(100);
@@ -931,7 +940,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                       <Upload className="w-8 h-8 text-[#F5D77F] mx-auto" />
                       <div>
                         <p className="text-[#FFF2A8] font-semibold text-base">Drop a file here, or click to choose</p>
-                        <p className="text-[11px] text-[#C8B1E4]/80 mt-1">Photos, videos, and PDFs up to 5 GB</p>
+                        <p className="text-[11px] text-[#C8B1E4]/80 mt-1">Photos, videos, and PDFs up to 100 MB · permanent Arweave storage included</p>
                       </div>
                     </>
                   )}
@@ -1379,10 +1388,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               ></textarea>
             </div>
 
-            <details className="group rounded-2xl border border-[#DFB260]/25 bg-[#120B21]/55 p-4">
+            <details open className="group rounded-2xl border border-[#DFB260]/25 bg-[#120B21]/55 p-4">
               <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-[#FFF2A8] font-semibold">
-                <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-300" /> Organization &amp; privacy options</span>
-                <span className="text-[10px] text-[#C8B1E4] font-normal">Optional · Your memory is private by default</span>
+                <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-300" /> Permanent storage security</span>
+                <span className="text-[10px] text-[#C8B1E4] font-normal">Required · Organization options are optional</span>
               </summary>
               <div className="mt-4 space-y-4 border-t border-[#DFB260]/15 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1411,10 +1420,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[#DFB260]/30 bg-[#120B21] p-3">
-              <label className="block text-[#FFF2A8] font-semibold mb-1">Also prepare for permanent archiving</label>
-              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="Enter your Vault Security passphrase" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
-              <p className="mt-2 text-[10px] text-[#C8B1E4]">Optional. A passphrase of 12 or more characters prepares an encrypted permanent-archive copy. Without one, this memory still saves privately to your vault.</p>
+            <div className="rounded-2xl border border-[#F5D77F]/45 bg-[#DFB260]/10 p-3">
+              <label className="block text-[#FFF2A8] font-semibold mb-1">Vault Security passphrase <span className="text-amber-200">Required</span></label>
+              <input ref={securityInputRef} type="password" value={archivalPassphrase} onChange={event=>{setArchivalPassphrase(event.target.value);setSecurityError('');}} placeholder="Unlock permanent encryption (12+ characters)" minLength={12} required aria-describedby="permanent-storage-help" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
+              <p id="permanent-storage-help" className="mt-2 text-[10px] text-[#C8B1E4]">Every upload is encrypted in this browser, staged privately in R2, and automatically queued for permanent storage on Arweave. A save is not complete until every item is queued.</p>
+              {securityError && <p role="alert" className="mt-2 text-xs text-rose-300">{securityError}</p>}
             </div>
               </div>
             </details>
@@ -1442,14 +1452,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={cloudActivity.transferring > 0}
+                disabled={cloudActivity.transferring > 0 || archivalPassphrase.length < 12}
                 className="gold-filled-btn px-6 py-2.5 text-xs cursor-pointer flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>
                   {uploadMode === 'album' 
                     ? `Save album (${albumFiles.length || 1} ${albumFiles.length === 1 ? 'item' : 'items'})`
-                    : 'Save memory'}
+                    : 'Save permanently'}
                 </span>
               </button>
             </div>
@@ -1466,7 +1476,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <div>
             <div className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full border text-[10px] font-semibold uppercase mb-2 ${archiveProgress === 100 ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/35' : 'bg-[#DFB260]/20 text-[#FFF2A8] border-[#DFB260]/40'}`}>
               {archiveProgress === 100 ? <CheckCircle2 className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin text-[#F5D77F]" />}
-              <span>{archiveProgress === 100 ? 'Saved to your vault' : 'Secure storage in progress'}</span>
+              <span>{archiveProgress === 100 ? 'Queued for permanent storage' : 'Permanent storage in progress'}</span>
             </div>
             <h3 className="font-cinzel font-bold text-3xl text-[#FFF2A8]">
               {archiveProgress === 100
@@ -1476,7 +1486,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <p className="text-xs text-[#C8B1E4]/80 mt-1 font-medium">
               {archiveProgress === 100
                 ? (uploadMode === 'album' ? `Find them in Memories → Albums → ${title}.` : 'Find it at the top of Memories under All memories.')
-                : (archiveStatusText || 'Uploading the operational copy and queueing any requested permanent archive.')}
+                : (archiveStatusText || 'Uploading the operational copy, encrypting it, and queueing permanent Arweave storage.')}
             </p>
           </div>
 
@@ -1502,7 +1512,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 2 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <HardDrive className="w-4 h-4 text-[#F5D77F]" />
-              <span>{archiveStep >= 2 ? '✓' : '•'} Encrypting eligible permanent archive in this browser</span>
+              <span>{archiveStep >= 2 ? '✓' : '•'} Encrypting the permanent archive in this browser</span>
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 3 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <ShieldCheck className="w-4 h-4 text-[#F5D77F]" />
@@ -1510,7 +1520,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           </div>
 
-          {archiveProgress === 100 ? <div className="rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-4 text-left text-xs"><p className="font-bold text-[#FFF2A8]">What happens next?</p><p className="mt-2 leading-5 text-[#C8B1E4]">Your files are saved privately and can be viewed now. Permanent archiving is separate: {archiveQueueResult.queued > 0 ? `${archiveQueueResult.queued} ${archiveQueueResult.queued === 1 ? 'file is' : 'files are'} queued, and status will appear in Vault Security.` : 'nothing was sent to Arweave. You can choose that later in Vault Security.'}</p></div> : <div className="text-[11px] text-[#FFF2A8] bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">You can close this window while storage finishes. Your files will appear in Memories when complete.</div>}
+          {archiveProgress === 100 ? <div className="rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-4 text-left text-xs"><p className="font-bold text-[#FFF2A8]">What happens next?</p><p className="mt-2 leading-5 text-[#C8B1E4]">{archiveQueueResult.queued} {archiveQueueResult.queued === 1 ? 'file is' : 'files are'} encrypted and queued for Arweave. You can use the files from Memories now; confirmation progress appears automatically in Vault Security.</p></div> : <div className="text-[11px] text-[#FFF2A8] bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">Keep this window open until every file has been encrypted and queued. Arweave confirmation continues automatically afterward.</div>}
 
           {archiveProgress < 100 ? (
             <button

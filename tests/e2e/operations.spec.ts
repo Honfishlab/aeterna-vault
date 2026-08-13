@@ -23,6 +23,16 @@ test("uses task-focused desktop navigation and an accessible mobile bottom bar",
   await expect(page.getByRole("button",{name:"More"})).toBeVisible();
 });
 
+test("requires permanent Arweave storage for every new memory", async ({ page }) => {
+  await page.goto("/#search");
+  await page.getByRole("button", { name:"Add memory" }).first().click();
+  await expect(page.getByText("Vault Security passphrase", { exact:false })).toBeVisible();
+  await expect(page.getByText(/Every upload is encrypted in this browser.*automatically queued for permanent storage on Arweave/i)).toBeVisible();
+  await expect(page.getByRole("button", { name:"Save permanently" })).toBeDisabled();
+  await page.getByPlaceholder("Unlock permanent encryption (12+ characters)").fill("family archive key");
+  await expect(page.getByRole("button", { name:"Save permanently" })).toBeEnabled();
+});
+
 test("does not overwrite the server vault before hydration completes", async ({ page }) => {
   const syncBodies:any[]=[];
   const memory={id:"preserved-1",title:"Preserved server memory",category:"Family",date:"2026-08-01",description:"Must survive a slow reload.",encryptionLevel:"Level 5 Protected",tags:["preserved"]};

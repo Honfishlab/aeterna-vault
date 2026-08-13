@@ -72,7 +72,7 @@ Google Photos and Google Drive videos are imported by the background worker rath
 6. The worker stores a separate video poster image in R2 and records available source metadata.
 7. The app serves both the video and poster through authenticated `/api/media/...` endpoints.
 
-Imports support files up to 5 GB. The progress panel shows transferred bytes, estimated time remaining, cancellation, retry, and the saved resume position. Completed entries retain original size, width, height, duration, capture time, and source provider when supplied by Google.
+Imports support files up to 100 MB so every accepted original can continue through browser encryption and permanent Arweave storage. The progress panel shows transferred bytes, estimated time remaining, cancellation, retry, and the saved resume position. Completed entries retain original size, width, height, duration, capture time, and source provider when supplied by Google.
 
 The `006_video_metadata_and_resumable_imports` migration adds the metadata, thumbnail, and multipart-checkpoint columns. Render applies it through the existing `npm run db:migrate` pre-deploy command. Multipart checkpoints and pending media are retained for 24 hours so deployments and temporary provider failures can recover.
 

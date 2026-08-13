@@ -1,10 +1,11 @@
 const toBase64=(bytes:Uint8Array)=>{let value="";bytes.forEach(byte=>{value+=String.fromCharCode(byte)});return btoa(value)};
 const decode=(value:string)=>Uint8Array.from(atob(value),character=>character.charCodeAt(0));
 const hex=(buffer:ArrayBuffer)=>Array.from(new Uint8Array(buffer)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+export const MAX_PERMANENT_ARCHIVE_BYTES=100*1024*1024-32;
 async function responseBody(response:Response,fallback:string){const text=await response.text();if(!text)return {error:fallback};try{return JSON.parse(text)}catch{return {error:text.slice(0,300)||fallback}}}
 async function masterKey(passphrase:string,salt:Uint8Array,iterations=310000){const material=await crypto.subtle.importKey("raw",new TextEncoder().encode(passphrase),"PBKDF2",false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations,hash:"SHA-256"},material,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
 export async function queuePermanentArchive(file:File,passphrase:string,onProgress?:(value:number)=>void,mediaId?:string,albumName?:string){
- if(passphrase.length<12)throw new Error("Use a permanent-vault passphrase of at least 12 characters.");if(file.size>10*1024*1024-32)throw new Error("The first direct-Arweave proof is limited to files smaller than 10 MB.");onProgress?.(5);
+ if(passphrase.length<12)throw new Error("Unlock Vault Security with your 12+ character passphrase before saving.");if(file.size>MAX_PERMANENT_ARCHIVE_BYTES)throw new Error("Files must be smaller than 100 MB to complete permanent storage.");onProgress?.(5);
  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
  const fileKey=await crypto.subtle.generateKey({name:"AES-GCM",length:256},true,["encrypt","decrypt"]),cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},fileKey,await file.arrayBuffer()),rawFileKey=await crypto.subtle.exportKey("raw",fileKey),kek=await masterKey(passphrase,salt),wrappedKey=await crypto.subtle.encrypt({name:"AES-GCM",iv:wrapIv},kek,rawFileKey),payloadHash=hex(await crypto.subtle.digest("SHA-256",cipher));onProgress?.(30);
  const encryptionMetadata={schema:2,algorithm:"AES-256-GCM",keyManagement:"envelope-v1",kdf:"PBKDF2-SHA256",iterations:310000,iv:toBase64(iv),salt:toBase64(salt),keyWrap:{algorithm:"AES-256-GCM",iv:toBase64(wrapIv),ciphertext:toBase64(new Uint8Array(wrappedKey))}};

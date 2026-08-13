@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const MAX_DIRECT_BYTES = 10 * 1024 * 1024;
+const MAX_DIRECT_BYTES = 100 * 1024 * 1024;
 
 async function client() {
   const { default: Arweave } = await import("arweave");
@@ -64,8 +64,8 @@ export async function uploadEncryptedArchive(input: { data: Uint8Array; jobId: s
   if (input.albumName) tags.push(["Album-Name",input.albumName.slice(0,200)]);
   for (const [name,value] of tags) transaction.addTag(name,value);
   await api.transactions.sign(transaction,jwk);
-  const response = await api.transactions.post(transaction);
-  if (![200,202].includes(response.status)) throw new Error("ARWEAVE_POST_" + response.status);
+  const uploader = await api.transactions.getUploader(transaction);
+  while (!uploader.isComplete) await uploader.uploadChunk();
   return { transactionId: transaction.id, rewardWinston: String(transaction.reward), owner: await api.wallets.jwkToAddress(jwk) };
 }
 
