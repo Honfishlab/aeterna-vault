@@ -515,7 +515,7 @@ export async function POST(request: Request) {
     const user=await authenticatedUser(request); if(!user)return json({error:"Authentication required."},401);
     if(!r2Configured())return json({error:"R2 staging is not configured."},503);
     const name=String(body.name||"").slice(0,255),albumName=String(body.albumName||"").trim().slice(0,200)||null,contentType=String(body.contentType||"application/octet-stream").slice(0,100),hash=String(body.payloadHash||"").toLowerCase(),size=Number(body.size||0);
-    if(!name||!/^[a-f0-9]{64}$/.test(hash)||!Number.isSafeInteger(size)||size<1||size>10*1024*1024)return json({error:"Encrypted archive must be between 1 byte and 10 MB with a SHA-256 hash."},400);
+    if(!name||!/^[a-f0-9]{64}$/.test(hash)||!Number.isSafeInteger(size)||size<1||size>100*1024*1024)return json({error:"Encrypted archive must be between 1 byte and 100 MB with a SHA-256 hash."},400);
     const id=crypto.randomUUID(),objectKey="archives/"+user.id+"/"+id+".bin";
     const {client,PutObjectCommand,getSignedUrl}=await r2Modules(); const uploadUrl=await getSignedUrl(client,new PutObjectCommand({Bucket:r2Bucket(),Key:objectKey,ContentType:"application/octet-stream"}),{expiresIn:600});
     await execute("INSERT INTO arweave_storage_jobs(id,user_id,media_object_id,r2_object_key,original_name,original_content_type,encrypted_size_bytes,payload_sha256,encryption_metadata,album_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)",[id,user.id,body.mediaId?String(body.mediaId):null,objectKey,name,contentType,size,hash,JSON.stringify(body.encryptionMetadata||{}),albumName]);

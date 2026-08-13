@@ -6,7 +6,7 @@ import { sendAccountEmail } from "./security";
 import { deadLetter, heartbeat, notifyUser } from "./notifications";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
-const MAX_BYTES = 5 * 1024 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024;
 const JOB_FIELDS = "id,provider_file_name AS name,status,progress,bytes_total AS \"bytesTotal\",bytes_transferred AS \"bytesTransferred\",media_object_id AS \"mediaId\",album_name AS \"albumName\",COALESCE((SELECT mo.album_name FROM media_objects mo WHERE mo.id=media_object_id),album_name) AS \"r2AlbumName\",provider_payload->>$$mimeType$$ AS \"mimeType\",provider_payload->>$$provider$$ AS provider,(provider_payload->>$$width$$)::integer AS width,(provider_payload->>$$height$$)::integer AS height,(provider_payload->>$$durationMillis$$)::bigint AS \"durationMs\",provider_payload->>$$createTime$$ AS \"createdTime\",EXISTS(SELECT 1 FROM media_objects mo WHERE mo.id=media_object_id AND mo.thumbnail_object_key IS NOT NULL) AS \"hasThumbnail\",(SELECT mo.processing_status FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingStatus\",(SELECT mo.processing_error FROM media_objects mo WHERE mo.id=media_object_id) AS \"processingError\",COALESCE((SELECT mo.content_type FROM media_objects mo WHERE mo.id=media_object_id),provider_payload->>$$mimeType$$) AS \"contentType\",(SELECT mo.completed_at FROM media_objects mo WHERE mo.id=media_object_id) AS \"r2UploadedAt\",(SELECT a.status FROM arweave_storage_jobs a WHERE a.media_object_id=media_import_jobs.media_object_id ORDER BY a.created_at DESC LIMIT 1) AS \"archiveStatus\",(SELECT a.album_name FROM arweave_storage_jobs a WHERE a.media_object_id=media_import_jobs.media_object_id ORDER BY a.created_at DESC LIMIT 1) AS \"arweaveAlbumName\",(SELECT a.transaction_id FROM arweave_storage_jobs a WHERE a.media_object_id=media_import_jobs.media_object_id ORDER BY a.created_at DESC LIMIT 1) AS \"arweaveId\",(SELECT a.confirmed_at FROM arweave_storage_jobs a WHERE a.media_object_id=media_import_jobs.media_object_id ORDER BY a.created_at DESC LIMIT 1) AS \"permanentArchiveDate\",error_message AS error,attempts,resume_offset AS \"resumeOffset\",created_at AS \"createdAt\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",completed_at AS \"completedAt\",delivered_at AS \"deliveredAt\"";
 let lastCleanupAt = 0;
 let workerBusy = false;
@@ -202,7 +202,7 @@ export async function processNextImportJob() {
     const rangeTotal = Number(contentRange.match(/\/(\d+)$/)?.[1] || 0);
     const responseBytes = Number(download.headers.get("content-length") || 0);
     const total = rangeTotal || Number(job.bytes_total || 0) || resumeOffset + responseBytes;
-    if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_5_GB");
+    if (total > MAX_BYTES) throw new Error("MEDIA_EXCEEDS_PERMANENT_STORAGE_LIMIT");
     const quota = await query<any>("SELECT u.storage_quota_bytes AS quota,COALESCE(SUM(m.size_bytes) FILTER (WHERE m.deleted_at IS NULL),0)::bigint AS used FROM users u LEFT JOIN media_objects m ON m.user_id=u.id WHERE u.id=$1 GROUP BY u.storage_quota_bytes", [job.user_id]);
     if (Number(quota[0]?.used || 0) + total > Number(quota[0]?.quota || 5368709120)) throw new Error("STORAGE_QUOTA_EXCEEDED");
     await execute("UPDATE media_import_jobs SET bytes_total=$1,updated_at=NOW() WHERE id=$2", [total, job.id]);
@@ -243,9 +243,10 @@ export async function processNextImportJob() {
     const expired = error?.message === "PHOTOS_SELECTION_EXPIRED";
     const videoNotReady = String(error?.message || "").startsWith("GOOGLE_VIDEO_NOT_READY_");
     const quotaExceeded = error?.message === "STORAGE_QUOTA_EXCEEDED";
-    const retry = !cancelled && !expired && !videoNotReady && !quotaExceeded && Number(job.attempts || 0) < 3;
+    const storageLimitExceeded = error?.message === "MEDIA_EXCEEDS_PERMANENT_STORAGE_LIMIT";
+    const retry = !cancelled && !expired && !videoNotReady && !quotaExceeded && !storageLimitExceeded && Number(job.attempts || 0) < 3;
     const status = cancelled ? "cancelled" : retry ? "queued" : "failed";
-    const message = quotaExceeded ? "Storage quota exceeded. Free space or upgrade, then retry." : expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
+    const message = storageLimitExceeded ? "This file exceeds the 100 MB permanent-storage limit and was not imported." : quotaExceeded ? "Storage quota exceeded. Free space or upgrade, then retry." : expired ? "Google Photos selection expired. Select the items again." : videoNotReady ? "Google Photos is still processing this video. Wait until it plays in Google Photos, then select it again." : String(error?.message || "IMPORT_FAILED").slice(0,500);
     await execute("UPDATE media_import_jobs SET status=$1,error_message=$2,next_attempt_at=NOW()+($3*INTERVAL $$1 second$$),updated_at=NOW() WHERE id=$4", [status, message, Math.min(300, 15 * 2 ** Number(job.attempts || 0)), job.id]);
     if (status === "failed") { await deadLetter("imports",job.id,job.user_id,message,{provider:job.provider_payload?.provider,name:job.provider_file_name}); await notifyUser(job.user_id,"error","Import needs attention",job.provider_file_name + ": " + message,{actionView:"imports",entityType:"media_import_job",entityId:job.id}); }
     return { id: job.id, status };

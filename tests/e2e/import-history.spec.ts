@@ -19,11 +19,11 @@ test("queues eligible R2-only files for encrypted Arweave archival", async ({ pa
   await page.route("**/api/arweave/archive/complete", route => route.fulfill({ contentType:"application/json", body:JSON.stringify({ success:true,jobId:"archive-job" }) }));
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/#imports");
-  await page.getByRole("button", { name:"Archive R2 items (1)" }).click();
+  await page.getByRole("button", { name:"Finish legacy archives (1)" }).click();
   await page.getByPlaceholder("Permanent-vault passphrase (12+ characters)").fill("a-secure-family-passphrase");
   await page.getByRole("button", { name:"Encrypt & queue all" }).click();
   await expect(page.getByText("1 of 1: portrait.jpg")).toBeVisible();
-  await expect(page.getByRole("button", { name:"Archive R2 items (1)" })).toBeVisible();
+  await expect(page.getByRole("button", { name:"Finish legacy archives (1)" })).toBeVisible();
 });
 
 test("shows the import audit as a plain file ledger", async ({ page }) => {
