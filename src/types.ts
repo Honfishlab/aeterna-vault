@@ -63,6 +63,7 @@ export interface MemoryItem {
   archiveStatus?: "r2_only" | "staging" | "queued" | "uploading" | "submitted" | "confirmed" | "failed";
   archiveError?: string;
   archiveConfirmations?: number;
+  visibility?: 'private' | 'family' | 'permanent' | 'public';
   tags: string[];
   people?: string[];
   albumName?: string;

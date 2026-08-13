@@ -5,6 +5,7 @@ import { queuePermanentArchive, verifyAndDecryptArchive } from "../lib/permanent
 import { getArchiveMasterPassphrase } from "../lib/archiveMasterSession";
 import { PassphraseRecoveryVault } from "./PassphraseRecoveryVault";
 import { ArchiveMasterSecurity } from "./ArchiveMasterSecurity";
+import { getSecurityActivity, recordSecurityActivity, SecurityActivityItem } from "../lib/securityActivity";
 
 interface ImmortalGatewayViewProps {
   memories: MemoryItem[];
@@ -80,6 +81,8 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({current:0,total:0,item:"",percent:0});
   const [estimatedCost, setEstimatedCost] = useState("");
+  const [activity,setActivity]=useState<SecurityActivityItem[]>(()=>getSecurityActivity());
+  useEffect(()=>{const refresh=()=>setActivity(getSecurityActivity());window.addEventListener('aeterna:security-activity',refresh);return()=>window.removeEventListener('aeterna:security-activity',refresh);},[]);
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +125,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Gateway verification failed.");
       setVerification(current => ({ ...current, [selected.id]: body }));
+      if(body.verified)recordSecurityActivity("Permanent copy verified",`${selected.name} passed independent availability checks.`);
       if (!body.verified) setError("The encrypted payload did not pass both gateway checks.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Gateway verification failed.");
@@ -143,6 +147,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
       anchor.href = url;
       anchor.download = selected.name;
       anchor.click();
+      recordSecurityActivity("Permanent file recovered",`${selected.name} was verified, decrypted, and downloaded.`);
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The archive could not be recovered.");
@@ -247,6 +252,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
     try {
       const response=await fetch("/api/arweave/collection/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:collectionTitle,albumName:selectedAlbumName,acknowledgePermanent})});
       const body=await response.json(); if(!response.ok)throw new Error(body.error||"Collection publication failed.");
+      recordSecurityActivity("Public album submitted",`“${collectionTitle.trim()}” was submitted for permanent publication.`);
       await load();
     } catch(reason) { setError(reason instanceof Error?reason.message:"Collection publication failed."); }
     finally { setPublishing(false); }
@@ -277,6 +283,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           <button onClick={()=>setActivePanel("records")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><ListChecks className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">2. Verify a copy</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Confirm a permanent file can still be found and downloaded.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">View records <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
           <button onClick={()=>setActivePanel("publish")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><Globe className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">3. Publish only when ready</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Create a public album viewer after reviewing what becomes permanent.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">Review publishing <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
         </div></section>
+        <section className="cosmic-card rounded-3xl p-6"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Security history</p><h2 className="mt-1 font-cinzel text-2xl text-[#FFF2A8]">Recent protection activity</h2></div><p className="text-xs text-[#C8B1E4]">Stored on this device</p></div>{activity.length?<div className="mt-4 divide-y divide-[#DFB260]/15 rounded-2xl border border-[#DFB260]/20 bg-[#120B21]/70">{activity.slice(0,8).map(item=><div key={item.id} className="flex flex-wrap items-start justify-between gap-3 p-4"><div><strong className="text-sm text-[#FFF2A8]">{item.action}</strong><p className="mt-1 text-xs text-[#C8B1E4]">{item.detail}</p></div><time className="text-xs text-[#C8B1E4]">{new Date(item.createdAt).toLocaleString()}</time></div>)}</div>:<p className="mt-4 rounded-xl bg-black/20 p-4 text-sm text-[#C8B1E4]">Security changes, recovery tests, verification checks, downloads, and publishing will appear here.</p>}</section>
       </>}
 
       {activePanel==="security"&&<>
@@ -319,6 +326,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           <div className="max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-[#DFB260]/20 p-3">{selectedAlbum.items.map(item=><div key={item.mediaId} className="flex items-center justify-between gap-3 rounded-xl bg-[#120B21] p-3 text-xs"><span className="min-w-0"><strong className="block truncate text-[#FFF2A8]">{item.name}</strong><span className="text-[10px] text-[#C8B1E4]">{bytes(item.sizeBytes)}</span></span><span className={item.archiveStatus==="confirmed"?"text-emerald-300":item.archiveStatus==="failed"?"text-rose-300":item.archiveStatus==="r2_only"?"text-[#C8B1E4]":"text-amber-200"}>{item.archiveStatus==="r2_only"&&item.sizeBytes>=10*1024*1024-32?"over 10 MB":item.archiveStatus.replace("_"," ")}</span></div>)}</div>
 
           <div className="border-t border-[#DFB260]/20 pt-4">
+            <div className="mb-4 rounded-2xl border border-amber-300/30 bg-amber-500/10 p-4"><h3 className="font-bold text-amber-100">Review what becomes public and permanent</h3><div className="mt-3 grid gap-2 text-xs text-amber-50 sm:grid-cols-2"><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>Album title and filenames</p><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>File types and transaction identifiers</p><p><CheckCircle2 className="mr-1 inline h-4 w-4"/>Encrypted payload metadata</p><p className="text-emerald-200"><Lock className="mr-1 inline h-4 w-4"/>Passphrases and original readable files stay private</p></div><p className="mt-3 text-xs text-amber-100">This album contains {selectedAlbum.itemCount} items. Publishing cannot be undone; future updates create another permanent version.</p></div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input value={collectionTitle} onChange={event=>setCollectionTitle(event.target.value)} maxLength={100} className="rounded-xl border border-[#DFB260]/40 bg-[#120B21] p-3 text-sm text-[#FFF2A8]" placeholder="Permanent collection title"/><button onClick={publishCollection} disabled={publishing||!acknowledgePermanent||!albumReady} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-3 text-xs disabled:opacity-30">{publishing?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}Publish album viewer to Arweave</button></div>
             <label className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100"><input aria-label="I understand the collection title" type="checkbox" checked={acknowledgePermanent} onChange={event=>setAcknowledgePermanent(event.target.checked)} className="mt-0.5"/><span>I understand the album title, filenames, transaction IDs, MIME types, and encrypted payload metadata will become public and permanent. Passphrases and plaintext are never published.</span></label>
             {!albumReady&&<p className="mt-3 text-xs text-amber-200">Publishing unlocks when every album item is confirmed on Arweave. Items over the current 10 MB direct-upload limit remain ineligible.</p>}

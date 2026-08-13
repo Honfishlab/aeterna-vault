@@ -921,6 +921,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(280px,42vh)] gap-4 pt-2">
           {filteredMemories.map((mem, idx) => {
             const isSelectedInGrid = selectedGridPhotoIds.includes(mem.id);
+            const privacy = mem.visibility === 'public' ? {label:'Public',classes:'border-sky-300/60 bg-sky-500/20 text-sky-100'} : mem.visibility === 'family' ? {label:'Shared with family',classes:'border-violet-300/60 bg-violet-500/20 text-violet-100'} : mem.visibility === 'permanent' || mem.archiveStatus === 'confirmed' ? {label:'Permanently stored',classes:'border-emerald-300/60 bg-emerald-500/20 text-emerald-100'} : {label:'Private',classes:'border-white/30 bg-black/55 text-white'};
             return (
               <div
                 key={mem.id}
@@ -1001,6 +1002,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         <CheckSquare className={`w-3.5 h-3.5 ${isSelectedInGrid ? 'fill-current text-[#120B21]' : ''}`} />
                         <span>{isSelectedInGrid ? 'Selected' : 'Select'}</span>
                       </button>
+
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-md ${privacy.classes}`} title="Who can access this memory">
+                        <Lock className="mr-1 inline h-3 w-3" />{privacy.label}
+                      </span>
 
                       {mem.albumName && (
                         <span className="rounded-full border border-[#DFB260] bg-[#DFB260]/30 px-2.5 py-1 text-xs font-bold text-[#FFF2A8] backdrop-blur-md truncate max-w-[180px]">
