@@ -251,7 +251,8 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             className={`min-h-11 px-3 rounded-full transition-colors cursor-pointer flex items-center gap-2 ${
               showInfo ? 'bg-[#DFB260] text-black font-bold shadow-lg' : 'hover:bg-white/10 text-white/90'
             }`}
-            title="View or edit memory details"
+            title="Toggle Details Info Sidebar"
+            aria-label="View or edit memory details"
           >
             <Info className="w-5 h-5" />
             <span className="hidden sm:inline text-xs font-semibold">Details</span>
