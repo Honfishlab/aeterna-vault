@@ -172,6 +172,39 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
   const confirmedArchiveCount = jobs.filter(job=>job.status==="confirmed").length;
   const allFilesViewerOutdated = Boolean(allFilesViewer && (allFilesViewer.itemCount < confirmedArchiveCount || Number(allFilesViewer.schemaVersion || 1) < 3));
 
+  const downloadImmortalAccessKit = () => {
+    if (!allFilesViewer) return;
+    const primaryUrl = `https://arweave.net/${allFilesViewer.transactionId}`;
+    const accessKit = [
+      "AETERNA IMMORTAL VIEWER — INDEPENDENT ACCESS KIT",
+      "",
+      "This record lets you open your encrypted archive without the Aeterna app, account, API, or website.",
+      "Keep it somewhere outside Aeterna together with your recovery instructions.",
+      "Do not write your passphrase in this file.",
+      "",
+      `Collection: ${allFilesViewer.title}`,
+      `Items included: ${allFilesViewer.itemCount}`,
+      `Arweave transaction: ${allFilesViewer.transactionId}`,
+      `Primary viewer: ${primaryUrl}`,
+      `Alternate gateway: https://ar-io.dev/${allFilesViewer.transactionId}`,
+      "",
+      "HOW TO RECOVER",
+      "1. Open either viewer URL in a modern browser.",
+      "2. Enter the archive master passphrase. It is processed only in that browser.",
+      "3. The viewer downloads the encrypted files from Arweave, verifies their hashes, and decrypts them locally.",
+      "4. Save the readable photos or documents to your device.",
+      "",
+      "The Immortal Viewer is a self-contained web page stored on Arweave. It does not load code or files from Aeterna.",
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([accessKit], { type: "text/plain;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "aeterna-immortal-viewer-access-kit.txt";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    recordSecurityActivity("Immortal access kit saved", "Independent viewer links and recovery instructions were downloaded.");
+  };
+
   const publishAllFilesViewer = async () => {
     const confirmedCount=confirmedArchiveCount;
     if(!confirmedCount)return;
@@ -268,7 +301,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           </div>
         </div>
         <nav aria-label="Vault security sections" className="mt-6 grid gap-2 rounded-2xl border border-[#DFB260]/25 bg-[#120B21]/70 p-2 sm:grid-cols-4">
-          {([{id:"overview",label:"Overview",icon:LayoutDashboard},{id:"security",label:"Access & recovery",icon:KeyRound},{id:"publish",label:"Publish albums",icon:Globe},{id:"records",label:"Archive records",icon:ListChecks}] as const).map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>setActivePanel(item.id)} aria-current={activePanel===item.id?"page":undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition ${activePanel===item.id?"bg-[#DFB260] text-[#120B21]":"text-[#D8CCE8] hover:bg-white/5 hover:text-[#FFF2A8]"}`}><Icon className="h-4 w-4"/>{item.label}</button>;})}
+          {([{id:"overview",label:"Overview",icon:LayoutDashboard},{id:"security",label:"Access & recovery",icon:KeyRound},{id:"publish",label:"Immortal Viewer",icon:Globe},{id:"records",label:"Archive records",icon:ListChecks}] as const).map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>setActivePanel(item.id)} aria-current={activePanel===item.id?"page":undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition ${activePanel===item.id?"bg-[#DFB260] text-[#120B21]":"text-[#D8CCE8] hover:bg-white/5 hover:text-[#FFF2A8]"}`}><Icon className="h-4 w-4"/>{item.label}</button>;})}
         </nav>
       </section>
 
@@ -278,10 +311,18 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
           <div className="grid grid-cols-2 gap-3"><div className="rounded-2xl border border-[#DFB260]/25 bg-[#160D27]/90 p-4"><p className="text-xs text-[#C8B1E4]">Permanent copies</p><p className="mt-2 text-3xl font-bold text-[#FFF2A8]">{confirmedArchiveCount}</p></div><div className="rounded-2xl border border-[#DFB260]/25 bg-[#160D27]/90 p-4"><p className="text-xs text-[#C8B1E4]">Needs migration</p><p className={`mt-2 text-3xl font-bold ${legacyArchiveJobs.length?"text-amber-200":"text-emerald-300"}`}>{legacyArchiveJobs.length}</p></div><div className="col-span-2 rounded-2xl border border-[#DFB260]/25 bg-[#160D27]/90 p-4"><p className="text-xs text-[#C8B1E4]">Public collection</p><p className="mt-2 font-semibold text-[#FFF2A8]">{pendingAllFilesViewer?"Publication pending":allFilesViewer?`${allFilesViewer.itemCount} items published`:"Not published"}</p></div></div>
         </section>
 
+        <section className="cosmic-card-gold rounded-3xl p-6">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="max-w-3xl"><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Independent forever access</p><h2 className="mt-2 font-cinzel text-2xl text-[#FFF2A8]">Immortal Viewer</h2><p className="mt-2 text-sm leading-6 text-[#D8CCE8]">A self-contained viewer stored on Arweave lets you and your family open, verify, decrypt, and download archived photos and documents even if Aeterna, this domain, and your account no longer exist.</p><p className="mt-3 text-xs leading-5 text-[#C8B1E4]">The viewer needs only a modern browser, an Arweave gateway, and your passphrase. It never calls an Aeterna server.</p></div>
+            <div className="flex min-w-56 flex-col gap-2">{allFilesViewer?<><a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-filled-btn flex min-h-11 items-center justify-center gap-2 px-4 py-2 text-xs"><ExternalLink className="h-4 w-4"/>Open Immortal Viewer</a><button onClick={downloadImmortalAccessKit} className="gold-beveled-btn flex min-h-11 items-center justify-center gap-2 px-4 py-2 text-xs"><Download className="h-4 w-4"/>Save independent access kit</button></>:<button onClick={()=>setActivePanel("publish")} className="gold-filled-btn flex min-h-11 items-center justify-center gap-2 px-4 py-2 text-xs"><Globe className="h-4 w-4"/>Create Immortal Viewer</button>}</div>
+          </div>
+          <div className="mt-5 grid gap-2 text-xs sm:grid-cols-3"><div className="rounded-xl bg-[#120B21] p-3"><strong className="text-emerald-300">No Aeterna login</strong><p className="mt-1 text-[#C8B1E4]">The permanent viewer is opened directly by URL.</p></div><div className="rounded-xl bg-[#120B21] p-3"><strong className="text-emerald-300">No Aeterna servers</strong><p className="mt-1 text-[#C8B1E4]">Viewer code and encrypted files live on Arweave.</p></div><div className="rounded-xl bg-[#120B21] p-3"><strong className="text-emerald-300">Local decryption</strong><p className="mt-1 text-[#C8B1E4]">Your passphrase stays inside the browser.</p></div></div>
+        </section>
+
         <section aria-labelledby="recommended-actions" className="cosmic-card rounded-3xl p-6"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Recommended next steps</p><h2 id="recommended-actions" className="mt-1 font-cinzel text-2xl text-[#FFF2A8]">Keep your vault recoverable</h2></div><div className="mt-5 grid gap-3 md:grid-cols-3">
           <button onClick={()=>setActivePanel("security")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><KeyRound className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">1. Protect access</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Set one master passphrase and save a separate recovery method.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">Review security <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
           <button onClick={()=>setActivePanel("records")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><ListChecks className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">2. Verify a copy</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Confirm a permanent file can still be found and downloaded.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">View records <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
-          <button onClick={()=>setActivePanel("publish")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><Globe className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">3. Publish only when ready</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Create a public album viewer after reviewing what becomes permanent.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">Review publishing <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
+          <button onClick={()=>setActivePanel("publish")} className="group min-h-40 rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-5 text-left hover:border-[#F5D77F]"><Globe className="h-6 w-6 text-[#F5D77F]"/><h3 className="mt-4 font-bold text-[#FFF2A8]">3. Preserve independent access</h3><p className="mt-2 text-sm leading-5 text-[#C8B1E4]">Create the Immortal Viewer and save its access kit outside Aeterna.</p><span className="mt-4 flex items-center gap-1 text-xs font-bold text-[#F5D77F]">Open Immortal Viewer <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1"/></span></button>
         </div></section>
         <section className="cosmic-card rounded-3xl p-6"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Security history</p><h2 className="mt-1 font-cinzel text-2xl text-[#FFF2A8]">Recent protection activity</h2></div><p className="text-xs text-[#C8B1E4]">Stored on this device</p></div>{activity.length?<div className="mt-4 divide-y divide-[#DFB260]/15 rounded-2xl border border-[#DFB260]/20 bg-[#120B21]/70">{activity.slice(0,8).map(item=><div key={item.id} className="flex flex-wrap items-start justify-between gap-3 p-4"><div><strong className="text-sm text-[#FFF2A8]">{item.action}</strong><p className="mt-1 text-xs text-[#C8B1E4]">{item.detail}</p></div><time className="text-xs text-[#C8B1E4]">{new Date(item.createdAt).toLocaleString()}</time></div>)}</div>:<p className="mt-4 rounded-xl bg-black/20 p-4 text-sm text-[#C8B1E4]">Security changes, recovery tests, verification checks, downloads, and publishing will appear here.</p>}</section>
       </>}
@@ -296,7 +337,7 @@ export const ImmortalGatewayView: React.FC<ImmortalGatewayViewProps> = () => {
       </>}
 
       {activePanel==="publish"&&<>
-      <section className="cosmic-card rounded-3xl p-6"><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Public sharing</p><h2 className="mt-2 font-cinzel text-2xl text-[#FFF2A8]">Your public collection viewer</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#D8CCE8]">Publishing creates a public, permanent index of selected encrypted files. People can see titles and file information, but they still need your passphrase to decrypt the files.</p><div className="mt-5 flex flex-wrap gap-3">{allFilesViewer&&<a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-beveled-btn flex min-h-11 items-center gap-2 px-4 py-2 text-xs"><ExternalLink className="h-4 w-4"/>Open current viewer ({allFilesViewer.itemCount})</a>}{(!allFilesViewer||allFilesViewerOutdated)&&!pendingAllFilesViewer&&<button onClick={publishAllFilesViewer} disabled={publishingAll||confirmedArchiveCount===0} className="gold-filled-btn flex min-h-11 items-center gap-2 px-4 py-2 text-xs disabled:opacity-30">{publishingAll?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}{allFilesViewerOutdated?`Update public viewer (${confirmedArchiveCount} files)`:"Create public viewer"}</button>}</div>{pendingAllFilesViewer&&<p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100">Your viewer is being published. It will become available after permanent storage confirms it.</p>}{allFilesViewerOutdated&&!pendingAllFilesViewer&&<p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100">Your current viewer does not include every confirmed file. Updating it creates a new permanent version.</p>}</section>
+      <section className="cosmic-card rounded-3xl p-6"><p className="text-xs font-semibold uppercase tracking-widest text-[#F5D77F]">Independent archive access</p><h2 className="mt-2 font-cinzel text-2xl text-[#FFF2A8]">Your Immortal Viewer</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#D8CCE8]">This self-contained page and its encrypted files live on Arweave—not on Aeterna. It remains usable through independent gateways if this app disappears. Titles and file information are public; readable files still require your passphrase.</p><div className="mt-5 flex flex-wrap gap-3">{allFilesViewer&&<><a href={`https://arweave.net/${allFilesViewer.transactionId}`} target="_blank" rel="noreferrer" className="gold-beveled-btn flex min-h-11 items-center gap-2 px-4 py-2 text-xs"><ExternalLink className="h-4 w-4"/>Open Immortal Viewer ({allFilesViewer.itemCount})</a><button onClick={downloadImmortalAccessKit} className="gold-beveled-btn flex min-h-11 items-center gap-2 px-4 py-2 text-xs"><Download className="h-4 w-4"/>Download access kit</button></>}{(!allFilesViewer||allFilesViewerOutdated)&&!pendingAllFilesViewer&&<button onClick={publishAllFilesViewer} disabled={publishingAll||confirmedArchiveCount===0} className="gold-filled-btn flex min-h-11 items-center gap-2 px-4 py-2 text-xs disabled:opacity-30">{publishingAll?<Loader2 className="h-4 w-4 animate-spin"/>:<Globe className="h-4 w-4"/>}{allFilesViewerOutdated?`Update Immortal Viewer (${confirmedArchiveCount} files)`:"Create Immortal Viewer"}</button>}</div>{pendingAllFilesViewer&&<p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100">Your Immortal Viewer is being published. It will become available after permanent storage confirms it.</p>}{allFilesViewerOutdated&&!pendingAllFilesViewer&&<p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-100">Your current Immortal Viewer does not include every confirmed file. Updating it creates a new permanent version; the previous version remains available.</p>}</section>
       <section className="cosmic-card-gold rounded-3xl p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#F5D77F]">Publish one album</p><h2 className="mt-2 font-cinzel text-2xl text-[#FFF2A8]">Create a permanent album viewer</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#C8B1E4]">Choose an album, make permanent encrypted copies of any remaining files, then review and publish its public viewer.</p></div>

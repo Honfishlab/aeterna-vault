@@ -152,10 +152,13 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await expect(page.getByRole("heading",{name:"Unlock permanent files"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Save a recovery method"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Unify legacy archive security"})).toBeVisible();
-  await page.getByRole("button",{name:"Publish albums"}).click();
-  await expect(page.getByRole("link",{name:/Open current viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
-  await expect(page.getByRole("button",{name:/Update public viewer/i})).toBeVisible();
-  await expect(page.getByText(/current viewer does not include every confirmed file/i)).toBeVisible();
+  await page.getByRole("button",{name:"Overview"}).click();
+  await expect(page.getByRole("heading",{name:"Immortal Viewer"})).toBeVisible();
+  await expect(page.getByRole("link",{name:/Open Immortal Viewer/i})).toHaveAttribute("href","https://arweave.net/allViewerTx");
+  await expect(page.getByRole("button",{name:/Save independent access kit/i})).toBeVisible();
+  await page.getByRole("button",{name:"Immortal Viewer",exact:true}).click();
+  await expect(page.getByRole("button",{name:/Update Immortal Viewer/i})).toBeVisible();
+  await expect(page.getByText(/current Immortal Viewer does not include every confirmed file/i)).toBeVisible();
   await expect(page.getByLabel("Vault album")).toHaveValue("Family Album");
   await expect(page.getByText("1 of 1 items permanently confirmed",{exact:false})).toBeVisible();
   await page.getByRole("button",{name:"Archive records"}).click();
@@ -165,7 +168,7 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await expect(page.getByText("Ciphertext independently verified.")).toBeVisible();
   await expect(page.getByRole("button",{name:/Verify, decrypt and download/i})).toBeEnabled();
   await expect(page.getByRole("link",{name:/Open gateway/i})).toHaveAttribute("href","https://arweave.net/"+job.transactionId);
-  await page.getByRole("button",{name:"Publish albums"}).click();
+  await page.getByRole("button",{name:"Immortal Viewer",exact:true}).click();
   await page.getByLabel(/I understand the collection title/i).check();
   await page.getByPlaceholder("Permanent collection title").fill("Family Forever");
   await page.getByRole("button",{name:/Publish album viewer to Arweave/i}).click();
@@ -181,7 +184,8 @@ test("standalone collection page references Arweave and never R2", async ({ page
   expect(html).toContain("realTx123");
   expect(html).toContain("PBKDF2");
   expect(html).toContain("envelope-v1");
-  expect(html).toContain("Collection archival passphrase");
+  expect(html).toContain("Archive master passphrase");
+  expect(html).toContain("No Aeterna app, account, API, or server is required");
   expect(html).toContain("Verify & decrypt all");
   expect(html).toContain("Full-size image");
   expect(html).toContain("Family Album");
@@ -189,6 +193,6 @@ test("standalone collection page references Arweave and never R2", async ({ page
   expect(html).not.toContain("r2.cloudflarestorage.com");
   await page.setContent(html);
   await expect(page.getByRole("heading",{name:"Family Album"})).toBeVisible();
-  await expect(page.getByPlaceholder("Collection archival passphrase")).toHaveCount(1);
+  await expect(page.getByPlaceholder("Archive master passphrase")).toHaveCount(1);
   await expect(page.getByRole("button",{name:"Verify & decrypt all"})).toBeVisible();
 });
