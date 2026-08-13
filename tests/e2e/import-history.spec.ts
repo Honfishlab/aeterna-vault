@@ -28,7 +28,7 @@ test("queues eligible R2-only files for encrypted Arweave archival", async ({ pa
 
 test("shows the import audit as a plain file ledger", async ({ page }) => {
   await page.goto("/#imports");
-  await expect(page.getByRole("heading",{name:"Audit"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Activity & Archive Status"})).toBeVisible();
   for (const heading of ["Preview","File","R2 album","Arweave album","Type","Size","Status","Arweave ID","Upload to R2 date","Permanent archive date"]) {
     await expect(page.getByRole("columnheader",{name:heading,exact:true})).toBeVisible();
   }

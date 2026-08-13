@@ -32,7 +32,7 @@ const AccountManagementView = lazyNamed(() => import('./components/AccountManage
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('landing');
-  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['imports','account','storage','recycle','search','audit','immortal'].includes(requested)) setCurrentView(requested); }, []);
+  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['dashboard','imports','account','storage','recycle','search','audit','immortal','inheritance','legacy','memorials','locker','pricing','empty'].includes(requested)) setCurrentView(requested); }, []);
   const [searchQuery, setSearchQuery] = useState('');
   
   // User Authentication State
@@ -492,7 +492,7 @@ export default function App() {
           />
         </div>
       ) : (
-        <main className="max-w-7xl mx-auto lg:ml-40 px-4 sm:px-6 lg:px-8 pt-8">
+        <main className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8">
           {currentView === 'dashboard' && (
             <DashboardView
               onSelectView={setCurrentView}

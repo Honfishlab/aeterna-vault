@@ -47,7 +47,7 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = () =>
     setLoadError(null);
     try {
       const response = await fetch("/api/media/storage-summary");
-      if (!response.ok) throw new Error("Storage metrics request failed.");
+      if (!response.ok) throw new Error("Archive status is temporarily unavailable.");
       setStorageData(await response.json());
     } catch (error: any) {
       setLoadError(error?.message || "Unable to load storage metrics.");
@@ -178,7 +178,7 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = () =>
   }, [breakdownData]);
 
   return (
-    <div className="cosmic-card-gold p-6 sm:p-8 rounded-3xl space-y-6 relative overflow-hidden shadow-2xl">
+    <div className="rounded-2xl border border-[#DFB260]/25 bg-[#0A0514]/65 p-4 sm:p-6 space-y-6 relative overflow-hidden">
       {/* Background Decorative Glow */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-[#DFB260]/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -190,13 +190,13 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = () =>
           </div>
           <div>
             <h2 className="font-cinzel font-bold text-xl text-[#FFF2A8] flex items-center gap-2">
-              <span>Arweave Permaweb Storage Dashboard</span>
+              <span>Permanent Archive Details</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                Live database
+                Verified records
               </span>
             </h2>
             <p className="text-xs text-[#C8B1E4]/90 font-mono">
-              Confirmed Arweave transactions, encrypted payload sizes, and current queue health
+              Confirmed files, pending work, and items that need attention
             </p>
           </div>
         </div>
@@ -229,7 +229,7 @@ export const StorageUsageDashboard: React.FC<StorageUsageDashboardProps> = () =>
         </div>
       </div>
 
-      {loadError && <div className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-xs text-rose-200">{loadError} <button onClick={loadStorageData} className="ml-2 underline">Retry</button></div>}
+      {loadError && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-100">{loadError} No health claim is shown until account records can be loaded. <button onClick={loadStorageData} className="ml-2 min-h-11 font-bold underline">Try again</button></div>}
       {isLoading && <div className="rounded-xl border border-[#DFB260]/30 bg-[#0A0514] p-3 text-xs font-mono text-[#C8B1E4]">Loading authenticated storage records...</div>}
 
       {/* Real Arweave storage metrics */}

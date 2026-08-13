@@ -96,7 +96,7 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[#DFB260]/40 pb-4">
         <div>
           <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#F5D77F]">Storage operations ledger</p>
-          <h1 className="mt-1 font-cinzel text-3xl font-bold text-[#FFF2A8]">Audit</h1>
+          <h1 className="mt-1 font-cinzel text-3xl font-bold text-[#FFF2A8]">Activity &amp; Archive Status</h1>
           <p className="mt-1 text-xs text-[#C8B1E4]">{totals.files} files · {totals.r2} uploaded to R2 · {totals.permanent} permanently archived</p>
         </div>
         <div className="flex flex-wrap gap-2">
