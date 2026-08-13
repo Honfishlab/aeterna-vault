@@ -24,7 +24,7 @@ const primaryItems: { id: ViewMode; label: string; icon: React.ComponentType<{ c
   { id: 'search', label: 'Memories', icon: Images },
   { id: 'legacy', label: 'Letters', icon: BookOpen },
   { id: 'inheritance', label: 'Family Access', icon: Users },
-  { id: 'immortal', label: 'Permanent Archive', icon: Archive },
+  { id: 'immortal', label: 'Vault Security', icon: Archive },
 ];
 
 const moreItems: { id: ViewMode; label: string; icon: React.ComponentType<{ className?: string }> }[] = [

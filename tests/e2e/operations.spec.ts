@@ -145,7 +145,7 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.route("**/api/arweave/collection/publish", async route => { expect(route.request().postDataJSON()).toMatchObject({acknowledgePermanent:true,albumName:"Family Album"}); published=true; await route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,transactionId:"viewerTx123"})}); });
   await page.route("**/api/arweave/archive/verify/archive-real-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({verified:true,hash:job.payloadHash,size:2048,gateways:[{gateway:"https://arweave.net",verified:true,status:200,hash:job.payloadHash,size:2048},{gateway:"https://secondary.example",verified:true,status:200,hash:job.payloadHash,size:2048}]})}));
   await page.goto("/#search");
-  await page.getByRole("button",{name:"Permanent Archive"}).click();
+  await page.getByRole("button",{name:"Vault Security"}).click();
   await expect(page.getByRole("heading",{name:"Vault Security"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Keep your vault recoverable"})).toBeVisible();
   await page.getByRole("button",{name:"Access & recovery"}).click();

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ViewMode, MemoryItem, UserProfile, MemorialShrine, Heir } from '../types';
 import { StorageUsageDashboard } from './StorageUsageDashboard';
-import { Archive, ArrowRight, BookOpen, Check, CheckCircle2, Circle, FileText, Images, Plus, RotateCcw, Sparkles, Trash2, Users, Video } from 'lucide-react';
+import { Archive, ArrowRight, BookOpen, Check, CheckCircle2, Circle, FileText, Globe, Images, KeyRound, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2, Users, Video } from 'lucide-react';
 
 interface DashboardViewProps {
   onSelectView: (view: ViewMode) => void;
@@ -19,6 +19,12 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectView,onOpenUpload,onOpenVideoRecorder,memories,memorials=[],heirs=[],currentUser,onClearDemoContent,onRestoreDemoContent }) => {
   const [showConfirmClear,setShowConfirmClear]=useState(false);
   const [notice,setNotice]=useState<string|null>(null);
+  const [vaultHealth,setVaultHealth]=useState({recovery:false,confirmed:0,publicCount:0,loaded:false});
+  useEffect(()=>{let active=true;Promise.all([
+    fetch('/api/arweave/passphrases',{cache:'no-store'}).then(r=>r.ok?r.json():{records:[]}).catch(()=>({records:[]})),
+    fetch('/api/arweave/archive/jobs',{cache:'no-store'}).then(r=>r.ok?r.json():{jobs:[]}).catch(()=>({jobs:[]})),
+    fetch('/api/arweave/collection',{cache:'no-store'}).then(r=>r.ok?r.json():{viewers:[]}).catch(()=>({viewers:[]})),
+  ]).then(([recovery,archive,collection])=>{if(active)setVaultHealth({recovery:Boolean(recovery.records?.length),confirmed:(archive.jobs||[]).filter((job:any)=>job.status==='confirmed').length,publicCount:(collection.viewers||[]).filter((viewer:any)=>viewer.status==='confirmed').length,loaded:true});});return()=>{active=false};},[]);
   const firstName=currentUser?.name.split(' ')[0]||'there';
   const clear=()=>{onClearDemoContent?.();setShowConfirmClear(false);setNotice('Sample content removed. Your vault is ready for your memories.');};
   const restore=()=>{onRestoreDemoContent?.();setNotice('Sample content restored.');};
@@ -28,12 +34,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectView,onOpe
     {id:'memorials' as ViewMode,title:'Memorials',description:'Honor family members and preserve their stories.',meta:`${memorials.length} memorials`,icon:Sparkles},
     {id:'locker' as ViewMode,title:'Important Documents',description:'Keep essential records together with your legacy.',meta:'Review documents',icon:FileText},
     {id:'inheritance' as ViewMode,title:'Family Access',description:'Invite trusted people and plan future access.',meta:`${heirs.length} people`,icon:Users},
-    {id:'immortal' as ViewMode,title:'Permanent Archive',description:'Review files submitted for permanent storage.',meta:'View archive',icon:Archive},
+    {id:'immortal' as ViewMode,title:'Vault Security',description:'Manage recovery, permanent copies, and public publishing.',meta:'Review protection',icon:ShieldCheck},
   ];
   const setupSteps=[
     {done:memories.length>0,label:'Add your first memory',action:onOpenUpload},
     {done:memories.some(memory=>Boolean(memory.albumName)),label:'Create an album',action:()=>onSelectView('search')},
     {done:heirs.length>0,label:'Invite a trusted family member',action:()=>onSelectView('inheritance')},
+    {done:vaultHealth.recovery,label:'Save a recovery method',action:()=>onSelectView('immortal')},
+    {done:vaultHealth.confirmed>0,label:'Create a permanent copy',action:()=>onSelectView('immortal')},
+    {done:vaultHealth.publicCount>0,label:'Review optional public sharing',action:()=>onSelectView('immortal')},
   ];
   const completedSteps=setupSteps.filter(step=>step.done).length;
   return <div id="dashboard-view" className="space-y-8 pb-28 text-[#E8DDF5] md:pb-16">
@@ -47,7 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectView,onOpe
       </div>
     </section>
 
-    {completedSteps < setupSteps.length && <section aria-labelledby="setup-title" className="rounded-2xl border border-[#DFB260]/30 bg-[#160D27]/92 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-[#F5D77F]">Getting started</p><h2 id="setup-title" className="mt-1 text-xl font-bold text-[#FFF2A8]">Set up your family vault</h2><p className="mt-2 text-sm text-[#D8CCE8]">{completedSteps} of {setupSteps.length} complete</p></div><div className="h-2 w-40 overflow-hidden rounded-full bg-black/30" aria-hidden="true"><div className="h-full bg-[#F5D77F]" style={{width:`${completedSteps/setupSteps.length*100}%`}}/></div></div><div className="mt-5 grid gap-2 sm:grid-cols-3">{setupSteps.map(step=><button key={step.label} onClick={step.action} className="flex min-h-14 items-center gap-3 rounded-xl border border-[#DFB260]/25 px-4 text-left text-sm hover:border-[#F5D77F]">{step.done?<Check className="h-5 w-5 text-emerald-300"/>:<Circle className="h-5 w-5 text-[#C8B1E4]"/>}<span className={step.done?'text-[#C8B1E4] line-through':'font-semibold text-[#FFF2A8]'}>{step.label}</span></button>)}</div></section>}
+    <section aria-labelledby="health-title" className="rounded-3xl border border-[#DFB260]/35 bg-[#160D27]/95 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-[#F5D77F]">Vault setup &amp; health</p><h2 id="health-title" className="mt-1 text-2xl font-bold text-[#FFF2A8]">{completedSteps} of {setupSteps.length} protections ready</h2><p className="mt-2 text-sm text-[#D8CCE8]">Finish the recommended steps in order. Permanent storage and public sharing are always optional.</p></div><div className="h-2 w-48 overflow-hidden rounded-full bg-black/30"><div className="h-full bg-gradient-to-r from-[#DFB260] to-[#FFF2A8]" style={{width:`${completedSteps/setupSteps.length*100}%`}}/></div></div><div className="mt-5 grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">{setupSteps.map((step,index)=><button key={step.label} onClick={step.action} className="flex min-h-16 items-center gap-3 rounded-xl border border-[#DFB260]/25 bg-[#120B21]/70 px-4 text-left text-sm hover:border-[#F5D77F]">{step.done?<Check className="h-5 w-5 shrink-0 text-emerald-300"/>:<span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[#DFB260]/50 text-xs text-[#F5D77F]">{index+1}</span>}<span className={step.done?'text-[#C8B1E4]':'font-semibold text-[#FFF2A8]'}>{step.label}</span></button>)}</div><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[{label:'Private vault',value:memories.length?'Ready':'Add a memory',icon:ShieldCheck,good:memories.length>0},{label:'Recovery method',value:vaultHealth.recovery?'Saved':'Needs setup',icon:KeyRound,good:vaultHealth.recovery},{label:'Permanent copies',value:String(vaultHealth.confirmed),icon:Archive,good:vaultHealth.confirmed>0},{label:'Public sharing',value:vaultHealth.publicCount?'On':'Off',icon:Globe,good:vaultHealth.publicCount===0}].map(item=>{const Icon=item.icon;return <div key={item.label} className="rounded-xl border border-[#DFB260]/20 bg-black/15 p-3"><Icon className={`h-4 w-4 ${item.good?'text-emerald-300':'text-amber-200'}`}/><p className="mt-2 text-xs text-[#C8B1E4]">{item.label}</p><p className="font-semibold text-[#FFF2A8]">{item.value}</p></div>})}</div></section>
 
     <section aria-labelledby="vault-title"><div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-semibold text-[#F5D77F]">Everything in one place</p><h2 id="vault-title" className="text-2xl font-bold text-[#FFF2A8]">Your Vault</h2></div><button onClick={()=>onSelectView('search')} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[#FFF2A8] hover:bg-white/5">Browse all memories →</button></div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(card=>{const Icon=card.icon;return <button key={card.id} id={`vault-card-${card.id}`} onClick={()=>onSelectView(card.id)} className="group min-h-48 rounded-2xl border border-[#DFB260]/30 bg-[#160D27]/92 p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:border-[#F5D77F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FFF2A8]"><div className="flex items-start justify-between"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#DFB260]/15 text-[#F5D77F]"><Icon className="h-5 w-5"/></span><ArrowRight className="h-5 w-5 text-[#F5D77F] transition group-hover:translate-x-1"/></div><h3 className="mt-5 text-xl font-bold text-[#FFF2A8]">{card.title}</h3><p className="mt-2 text-sm leading-6 text-[#D8CCE8]">{card.description}</p><p className="mt-4 text-sm font-semibold text-[#F5D77F]">{card.meta}</p></button>})}</div>
