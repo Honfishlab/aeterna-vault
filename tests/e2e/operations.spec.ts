@@ -10,30 +10,17 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/notifications", route => route.fulfill({ contentType:"application/json",body:JSON.stringify({notifications:[],unread:0}) }));
 });
 
-test("keeps legacy, vault, and administrative destinations in the desktop left rail", async ({ page }) => {
+test("uses task-focused desktop navigation and an accessible mobile bottom bar", async ({ page }) => {
   await page.setViewportSize({width:1440,height:900});
   await page.goto("/#storage");
-  await expect(page.locator("#side-nav-memorials")).toBeVisible();
-  await expect(page.locator("#side-nav-legacy")).toBeVisible();
-  await expect(page.locator("#side-nav-locker")).toBeVisible();
-  await expect(page.locator("#vault-nav-imports")).toBeVisible();
-  await expect(page.locator("#vault-nav-storage")).toBeVisible();
-  await expect(page.locator("#vault-nav-account")).toBeVisible();
-  await expect(page.locator("#vault-nav-wallet")).toBeVisible();
-  await expect(page.locator("#admin-nav-pricing")).toBeVisible();
-  await expect(page.locator("#admin-nav-recycle")).toBeVisible();
-  await expect(page.getByRole("navigation",{name:"Vault sections"})).toBeVisible();
-  await expect(page.locator("#nav-link-memorials")).toBeHidden();
-  await expect(page.locator("#nav-link-imports")).toBeHidden();
-  await expect(page.locator("#nav-link-storage")).toBeHidden();
-  await expect(page.locator("#nav-link-account")).toBeHidden();
-  await expect(page.locator("#nav-link-pricing")).toBeHidden();
-  await expect(page.locator("#nav-link-recycle")).toBeHidden();
-  await expect(page.locator("#btn-wallet-connect")).toBeHidden();
-  await page.setViewportSize({width:1800,height:900});
-  await expect(page.locator("#side-nav-memorials")).toBeVisible();
-  await expect(page.locator("#nav-link-memorials")).toBeHidden();
-  await expect(page.locator("#nav-link-dashboard")).toContainText("Dashboard");
+  await expect(page.getByRole("navigation",{name:"Primary navigation"})).toBeVisible();
+  await expect(page.locator("#nav-link-dashboard")).toContainText("Home");
+  await expect(page.locator("#nav-link-search")).toContainText("Memories");
+  await expect(page.locator("#nav-link-inheritance")).toContainText("Family Access");
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole("navigation",{name:"Mobile navigation"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Add memory"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"More"})).toBeVisible();
 });
 
 test("does not overwrite the server vault before hydration completes", async ({ page }) => {
@@ -58,7 +45,8 @@ test("shows real Arweave archive metrics on the dashboard", async ({ page }) => 
   }) }));
   await page.goto("/#storage");
   await page.locator("#nav-link-dashboard").click();
-  await expect(page.getByRole("heading",{name:"Arweave Permaweb Storage Dashboard"})).toBeVisible();
+  await page.getByText("Advanced storage details").click();
+  await expect(page.getByRole("heading",{name:"Permanent Archive Details"})).toBeVisible();
   await expect(page.getByText("7 MB",{exact:true}).first()).toBeVisible();
   await expect(page.getByText("(3 transactions)",{exact:true})).toBeVisible();
   await expect(page.getByText("Archive Failures").locator("..")).toContainText("1");
@@ -157,8 +145,8 @@ test("Immortal Gateway uses verified archive jobs and gates controls", async ({ 
   await page.route("**/api/arweave/collection/publish", async route => { expect(route.request().postDataJSON()).toMatchObject({acknowledgePermanent:true,albumName:"Family Album"}); published=true; await route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,transactionId:"viewerTx123"})}); });
   await page.route("**/api/arweave/archive/verify/archive-real-1", route => route.fulfill({contentType:"application/json",body:JSON.stringify({verified:true,hash:job.payloadHash,size:2048,gateways:[{gateway:"https://arweave.net",verified:true,status:200,hash:job.payloadHash,size:2048},{gateway:"https://secondary.example",verified:true,status:200,hash:job.payloadHash,size:2048}]})}));
   await page.goto("/#search");
-  await page.getByRole("button",{name:"Immortal Gateway"}).click();
-  await expect(page.getByRole("heading",{name:"Immortal Arweave Archive"})).toBeVisible();
+  await page.getByRole("button",{name:"Permanent Archive"}).click();
+  await expect(page.getByRole("heading",{name:"Permanent Archive"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Permanent Vault Master Security"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Archival Passphrase Recovery Vault"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Unify legacy archive security"})).toBeVisible();

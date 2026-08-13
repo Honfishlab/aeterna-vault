@@ -171,6 +171,9 @@ export const LandingView: React.FC<LandingViewProps> = ({
   const [isMuted, setIsMuted] = useState(true);
   const [showAiWalkthrough, setShowAiWalkthrough] = useState(true);
   const [timelineYear, setTimelineYear] = useState(2026);
+  const [interactive, setInteractive] = useState(false);
+
+  useEffect(() => setInteractive(true), []);
 
   const currentScene = VIDEO_SCENES[activeSceneIndex];
 
@@ -256,7 +259,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
             <div className="hidden sm:flex items-center space-x-2 bg-[#120B21]/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#DFB260]/30">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="text-[11px] font-mono font-bold uppercase tracking-widest text-[#F5D77F]">
-                PERMAWEB ACTIVE
+                PRIVATE BY DEFAULT
               </span>
             </div>
           </div>
@@ -274,16 +277,19 @@ export const LandingView: React.FC<LandingViewProps> = ({
               <>
                 <button
                   onClick={() => onOpenAuth('signin')}
+                  disabled={!interactive}
                   className="ghost-button text-xs px-4 py-2.5 text-[#FFF2A8] font-semibold flex items-center space-x-1.5 cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5 text-[#F5D77F]" />
-                  <span>Log In</span>
+                  <span>Sign in</span>
                 </button>
                 <button
+                  id="landing-create-vault"
                   onClick={() => onOpenAuth('signup')}
+                  disabled={!interactive}
                   className="solid-button text-xs px-5 py-2.5 font-bold cursor-pointer"
                 >
-                  <span>Create Vault</span>
+                  <span>Create your vault</span>
                 </button>
               </>
             )}
@@ -294,35 +300,38 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <div className="col-start-2 row-start-2 my-auto max-w-2xl py-8 sm:py-12 z-10 space-y-6">
           <p className="eyebrow text-[#E2BC7B] font-mono text-xs font-bold uppercase tracking-widest flex items-center gap-2">
             <Sparkle className="w-3.5 h-3.5 text-[#F5D77F]" />
-            Your AI-guided memory storage for generations over time
+            A private home for your family's stories
           </p>
 
           <h1 className="font-serif font-bold text-4xl sm:text-6xl md:text-7xl leading-[0.95] text-transparent bg-clip-text bg-gradient-to-r from-[#FFF8D0] via-[#F5D77F] to-[#B88E4C] drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)]">
-            Preserve the moments that make a family eternal.
+            Keep the moments your family should never lose.
           </h1>
 
           <p className="lede text-base sm:text-xl text-[#C8B1E4]/90 font-sans leading-relaxed max-w-xl">
-            Aeterna Vault helps you store beautiful photos, meaningful videos, written time capsules, and the stories behind them so future generations can feel where they came from.
+            Save photos, videos, letters, and the stories behind them. Organize everything privately, invite trusted family, and choose what to preserve permanently.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2">
             <button
               onClick={() => onOpenAuth('signup')}
-              className="solid-button large text-xs sm:text-sm uppercase tracking-wider font-bold cursor-pointer"
+              disabled={!interactive}
+              className="min-h-12 rounded-xl bg-[#F5D77F] px-6 text-sm font-bold text-[#120B21] shadow-xl hover:bg-[#FFF2A8]"
             >
-              <span>Start a Family Vault</span>
+              <span>Create your vault</span>
             </button>
 
             <button
               onClick={() => onOpenAuth('signin')}
-              className="ghost-button large text-xs sm:text-sm uppercase tracking-wider text-[#FFF2A8] font-semibold cursor-pointer"
+              disabled={!interactive}
+              className="min-h-12 rounded-xl px-5 text-sm font-semibold text-[#FFF2A8] underline-offset-4 hover:underline"
             >
-              <span>I Already Have One</span>
+              <span>Sign in</span>
             </button>
 
             <button
               onClick={onSignInAsDemo}
-              className="bg-[#28134D]/80 hover:bg-[#381B68] text-[#C8B1E4] border border-[#DFB260]/40 font-semibold text-xs px-4 py-3 rounded-full transition-all cursor-pointer flex items-center space-x-1.5"
+              disabled={!interactive}
+              className="flex min-h-12 items-center gap-2 rounded-xl border border-[#DFB260]/45 bg-[#28134D]/80 px-5 text-sm font-semibold text-[#FFF2A8] transition hover:bg-[#381B68]"
               title="Explore interactive demo mode"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#F5D77F]" />
@@ -380,6 +389,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
           </div>
           <button
             onClick={() => onOpenAuth('signup')}
+            disabled={!interactive}
             className="gold-beveled-btn text-xs px-5 py-2.5 text-[#FFF2A8] font-bold flex items-center space-x-2 shrink-0 cursor-pointer"
           >
             <span>Create Your Living Archive</span>
@@ -431,7 +441,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 <span>Videos become searchable</span>
               </h3>
               <p className="text-xs sm:text-sm text-[#C8B1E4]/80 leading-relaxed font-sans">
-                Clips are organized into a living family archive, ready for future discovery without compression or subscription expiration.
+                Clips are organized into a living family archive, ready for future discovery and optional permanent preservation.
               </p>
             </div>
           </article>
@@ -463,7 +473,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
       </section>
 
       {/* CINEMATIC VIDEO FORMAT SHOWCASE */}
-      <div className="cosmic-card p-6 sm:p-10 space-y-8 shadow-xl">
+      <div className="hidden">
         
         <div className="text-center space-y-3 max-w-3xl mx-auto">
           <span className="text-[#F5D77F] text-xs font-mono font-semibold uppercase tracking-widest flex items-center justify-center gap-2">
@@ -608,7 +618,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
       </div>
 
       {/* GENERATIONAL STORAGE OVER TIME INTERACTIVE TIMELINE */}
-      <div className="cosmic-card p-8 sm:p-12 space-y-8 shadow-xl">
+      <div className="hidden">
         <div className="text-center space-y-3 max-w-3xl mx-auto">
           <span className="text-[#F5D77F] text-xs font-mono font-semibold uppercase tracking-widest">
             GUARANTEED ACROSS CENTURIES
@@ -694,27 +704,29 @@ export const LandingView: React.FC<LandingViewProps> = ({
         <div className="relative z-10 max-w-2xl mx-auto space-y-4">
           <AeternaLogo size="lg" showSubtitle={false} />
           <h2 className="text-3xl sm:text-4xl font-cinzel font-bold text-[#FFF2A8] leading-tight">
-            Begin Building Your Permanent Family Legacy Today
+            Start your family vault today
           </h2>
           <p className="text-sm text-[#C8B1E4]">
-            Sign in to your sovereign vault or register a new 200-year storage node in under 60 seconds.
+            Begin with an empty private vault, then add memories and invite family when you are ready.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button
               onClick={() => onOpenAuth('signup')}
-              className="gold-filled-btn px-8 py-4 text-xs uppercase tracking-wider cursor-pointer"
+              disabled={!interactive}
+              className="min-h-12 rounded-xl bg-[#F5D77F] px-8 text-sm font-bold text-[#120B21]"
             >
               <UserPlus className="w-4 h-4 text-[#120B21] inline mr-1.5" />
-              <span>Sign Up as New User</span>
+              <span>Create your vault</span>
             </button>
 
             <button
               onClick={() => onOpenAuth('signin')}
-              className="gold-beveled-btn px-8 py-4 text-xs uppercase tracking-wider text-[#FFF2A8] font-bold cursor-pointer"
+              disabled={!interactive}
+              className="min-h-12 rounded-xl border border-[#DFB260]/45 px-8 text-sm font-bold text-[#FFF2A8]"
             >
               <LogIn className="w-4 h-4 text-[#F5D77F] inline mr-1.5" />
-              <span>Sign In (Registered User)</span>
+              <span>Sign in</span>
             </button>
           </div>
         </div>

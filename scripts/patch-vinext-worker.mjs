@@ -36,7 +36,9 @@ await build({
 });
 fs.renameSync(bundledSsrEntry, ssrEntry);
 const bundledSsr = fs.readFileSync(ssrEntry, 'utf8');
-const workerSsr = bundledSsr.replaceAll('O2(`react-dom`)', 'require_react_dom()');
+// Esbuild renames Vinext's generated require shim as the bundle graph changes.
+// Match that generated identifier instead of coupling this patch to one build.
+const workerSsr = bundledSsr.replace(/\bO\d+\(`react-dom`\)/g, 'require_react_dom()');
 if (workerSsr === bundledSsr) throw new Error('Bundled SSR React DOM require was not found.');
 fs.writeFileSync(ssrEntry, workerSsr);
 const entry = path.join(root, 'index.js');

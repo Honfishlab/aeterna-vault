@@ -311,3 +311,15 @@
 @media (prefers-reduced-motion: reduce) {
   .viewer-ken-burns { animation: none; }
 }
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid #fff2a8;
+  outline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+  button,
+  summary {
+    min-height: 44px;
+  }
+}

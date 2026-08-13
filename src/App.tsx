@@ -1,23 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ViewMode, MemoryItem, LegacyLetter, MemorialShrine, WalletState, Heir, InheritanceTriggerConfig, UserProfile } from './types';
 import { INITIAL_MEMORIES, INITIAL_LETTERS, INITIAL_MEMORIALS, INITIAL_HEIRS, INITIAL_TRIGGER_CONFIG } from './data/mockData';
 import { setVaultItem, getVaultItem, removeVaultItem, safeSetLocalStorage } from './lib/storage';
 import { Navbar } from './components/Navbar';
-import { DashboardView } from './components/DashboardView';
-import { LandingView } from './components/LandingView';
-import { PricingView } from './components/PricingView';
-import { LegacyView } from './components/LegacyView';
-import { SearchView } from './components/SearchView';
-import { EmptyView } from './components/EmptyView';
-import { MemorialsView } from './components/MemorialsView';
-import { LockerView } from './components/LockerView';
-import { InheritanceView } from './components/InheritanceView';
-import { ImmortalGatewayView } from './components/ImmortalGatewayView';
-import { AuditView } from './components/AuditView';
-import { ImportHistoryView } from './components/ImportHistoryView';
-import { RecycleBinView } from './components/RecycleBinView';
-import { StorageManagementView } from './components/StorageManagementView';
-import { AccountManagementView } from './components/AccountManagementView';
 import { UploadModal } from './components/UploadModal';
 import { VideoRecorderModal } from './components/VideoRecorderModal';
 import { WalletModal } from './components/WalletModal';
@@ -26,9 +11,28 @@ import { AuthModal } from './components/AuthModal';
 import { VaultExportModal } from './components/VaultExportModal';
 import { NotificationProvider } from './components/NotificationSystem';
 
+const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(loader: () => Promise<T>, name: K) =>
+  lazy(async () => ({ default: (await loader())[name] as React.ComponentType<any> }));
+
+const DashboardView = lazyNamed(() => import('./components/DashboardView'), 'DashboardView');
+const LandingView = lazyNamed(() => import('./components/LandingView'), 'LandingView');
+const PricingView = lazyNamed(() => import('./components/PricingView'), 'PricingView');
+const LegacyView = lazyNamed(() => import('./components/LegacyView'), 'LegacyView');
+const SearchView = lazyNamed(() => import('./components/SearchView'), 'SearchView');
+const EmptyView = lazyNamed(() => import('./components/EmptyView'), 'EmptyView');
+const MemorialsView = lazyNamed(() => import('./components/MemorialsView'), 'MemorialsView');
+const LockerView = lazyNamed(() => import('./components/LockerView'), 'LockerView');
+const InheritanceView = lazyNamed(() => import('./components/InheritanceView'), 'InheritanceView');
+const ImmortalGatewayView = lazyNamed(() => import('./components/ImmortalGatewayView'), 'ImmortalGatewayView');
+const AuditView = lazyNamed(() => import('./components/AuditView'), 'AuditView');
+const ImportHistoryView = lazyNamed(() => import('./components/ImportHistoryView'), 'ImportHistoryView');
+const RecycleBinView = lazyNamed(() => import('./components/RecycleBinView'), 'RecycleBinView');
+const StorageManagementView = lazyNamed(() => import('./components/StorageManagementView'), 'StorageManagementView');
+const AccountManagementView = lazyNamed(() => import('./components/AccountManagementView'), 'AccountManagementView');
+
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('landing');
-  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['imports','account','storage','recycle','search','audit','immortal'].includes(requested)) setCurrentView(requested); }, []);
+  useEffect(() => { const requested = window.location.hash.replace('#', '') as ViewMode; if (['dashboard','imports','account','storage','recycle','search','audit','immortal','inheritance','legacy','memorials','locker','pricing','empty'].includes(requested)) setCurrentView(requested); }, []);
   const [searchQuery, setSearchQuery] = useState('');
   
   // User Authentication State
@@ -461,6 +465,7 @@ export default function App() {
       )}
 
       {/* Main View Container */}
+      <Suspense fallback={<div role="status" className="min-h-[40vh] px-6 py-16 text-center text-sm text-[#C8B1E4]">Opening vault…</div>}>
       {currentView === 'landing' ? (
         <div className="w-full min-h-screen">
           <LandingView
@@ -487,7 +492,7 @@ export default function App() {
           />
         </div>
       ) : (
-        <main className="max-w-7xl mx-auto lg:ml-40 px-4 sm:px-6 lg:px-8 pt-8">
+        <main className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8">
           {currentView === 'dashboard' && (
             <DashboardView
               onSelectView={setCurrentView}
@@ -605,6 +610,7 @@ export default function App() {
         )}
       </main>
       )}
+      </Suspense>
 
       {/* Global Modals */}
       <UploadModal

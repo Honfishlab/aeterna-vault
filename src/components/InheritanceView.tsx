@@ -142,7 +142,7 @@ export const InheritanceView: React.FC<InheritanceViewProps> = ({
           <div className="flex items-center space-x-2 text-xs text-[#C8B1E4] font-medium mb-1">
             <span onClick={() => onSelectView('dashboard')} className="hover:text-[#FFF2A8] cursor-pointer">Vault</span>
             <span>/</span>
-            <span className="text-[#F5D77F] font-semibold">Inheritance Protocol</span>
+            <span className="text-[#F5D77F] font-semibold">Family Access</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-cinzel font-bold text-[#FFF2A8]">
             Estate & Family Access Protocol
