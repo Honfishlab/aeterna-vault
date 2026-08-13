@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewMode, MemoryItem } from '../types';
 import { ImageViewerModal } from './ImageViewerModal';
+import { recordUsabilityEvent } from '../lib/usabilityMetrics';
 import { 
   Search, 
   FolderPlus, 
@@ -72,6 +73,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
   // Group modal state (Quick album creation)
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [newAlbumTitleInput, setNewAlbumTitleInput] = useState('');
+  const [albumDestination, setAlbumDestination] = useState<'existing' | 'new'>('new');
+  const [existingAlbumName, setExistingAlbumName] = useState('');
 
   // Local live search query
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -79,6 +82,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   // Album Editing state
   const [editingAlbumName, setEditingAlbumName] = useState<string | null>(null);
   const [albumToDelete, setAlbumToDelete] = useState<{ name: string; itemIds: string[] } | null>(null);
+  const [memoryToDelete, setMemoryToDelete] = useState<MemoryItem | null>(null);
   const [editTab, setEditTab] = useState<'details' | 'photos' | 'add'>('details');
   const [editAlbumTitle, setEditAlbumTitle] = useState<string>('');
   const [editAlbumDate, setEditAlbumDate] = useState<string>('');
@@ -142,6 +146,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       );
       setLastGridSelectedIndex(index);
     }
+    if (!selectedGridPhotoIds.includes(mem.id)) recordUsabilityEvent('memory_selected');
   };
 
   // Handler for Option C (Attach Vault Memories) inside Edit Album modal (supports Shift key range selection)
@@ -221,17 +226,21 @@ export const SearchView: React.FC<SearchViewProps> = ({
   // Action for single item deletion
   const handleDeleteSingleMemory = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this memory item from your vault?')) {
-      if (onDeleteMemory) {
-        onDeleteMemory(id);
-      } else if (onUpdateMemories) {
-        onUpdateMemories(memories.filter(m => m.id !== id));
-      }
-      if (selectedImage?.id === id) {
-        setSelectedImage(null);
-      }
-      setSelectedGridPhotoIds(prev => prev.filter(itemId => itemId !== id));
+    const memory = memories.find(item => item.id === id);
+    if (memory) setMemoryToDelete(memory);
+  };
+
+  const confirmDeleteSingleMemory = () => {
+    if (!memoryToDelete) return;
+    const id = memoryToDelete.id;
+    if (onDeleteMemory) {
+      onDeleteMemory(id);
+    } else if (onUpdateMemories) {
+      onUpdateMemories(memories.filter(m => m.id !== id));
     }
+    if (selectedImage?.id === id) setSelectedImage(null);
+    setSelectedGridPhotoIds(prev => prev.filter(itemId => itemId !== id));
+    setMemoryToDelete(null);
   };
 
   const requestDeleteAlbum = (albumName: string) => {
@@ -594,31 +603,37 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
   const handleGroupAlbumSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const albumTitle = newAlbumTitleInput.trim() || `${selectedFilter !== 'All' ? selectedFilter : 'Custom'} Album Collection`;
+    const albumTitle = albumDestination === 'existing' ? existingAlbumName : newAlbumTitleInput.trim();
+    if (!albumTitle || selectedGridPhotoIds.length === 0) return;
     
-    if (onUpdateMemories && filteredMemories.length > 0) {
-      const targetIds = new Set(filteredMemories.map(m => m.id));
+    if (onUpdateMemories) {
+      const targetIds = new Set(selectedGridPhotoIds);
+      const albumAlreadyHasCover = memories.some(m => m.albumName?.toLowerCase() === albumTitle.toLowerCase() && m.isCoverPhoto);
       let isFirst = true;
       const updatedList = memories.map(m => {
         if (targetIds.has(m.id)) {
-          const isLead = isFirst;
+          const isLead = !albumAlreadyHasCover && isFirst;
           isFirst = false;
           return {
             ...m,
             albumName: albumTitle,
-            tags: Array.from(new Set([...m.tags, 'Album', albumTitle])),
+            tags: Array.from(new Set([...(m.tags || []), albumTitle])),
             isCoverPhoto: isLead
           };
         }
         return m;
       });
       onUpdateMemories(updatedList);
+      recordUsabilityEvent(albumDestination === 'new' ? 'album_created' : 'album_updated');
     }
 
     setCreatedAlbumName(albumTitle);
     setShowAlbumCreatedToast(true);
     setIsGroupModalOpen(false);
     setNewAlbumTitleInput('');
+    setExistingAlbumName('');
+    setSelectedGridPhotoIds([]);
+    setMemorySection('albums');
     setSelectedFilter(albumTitle);
     setTimeout(() => setShowAlbumCreatedToast(false), 5000);
   };
@@ -711,14 +726,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
             {memorySection === 'memories' && !currentActiveAlbum && <button
               onClick={() => {
-                setNewAlbumTitleInput(activeQuery ? `${activeQuery} Album Collection` : 'New Album Collection');
+                setAlbumDestination(albumGroups.length ? 'existing' : 'new');
+                setExistingAlbumName(albumGroups[0]?.albumName || '');
+                setNewAlbumTitleInput('');
                 setIsGroupModalOpen(true);
               }}
-              disabled={filteredMemories.length === 0}
+              disabled={selectedGridPhotoIds.length === 0}
               className="flex items-center space-x-1.5 gold-beveled-btn px-4 py-2.5 rounded-2xl text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FolderPlus className="w-4 h-4 text-[#F5D77F]" />
-                <span>Create album from {filteredMemories.length}</span>
+                <span>Add {selectedGridPhotoIds.length || ''} selected to album</span>
             </button>}
 
             <button
@@ -841,7 +858,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   className="flex items-center space-x-3.5 flex-1 min-w-0 cursor-pointer"
                 >
                   <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-[#DFB260]/40 flex-shrink-0 bg-[#120B21]">
-                    <img src={ag.coverUrl.replace("size=large", "size=medium")} alt={ag.albumName} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                    <img src={ag.coverUrl.replace("size=large", "size=medium")} alt={ag.albumName} loading="lazy" decoding="async" referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                     <div className="absolute inset-0 bg-black/20"></div>
                     {ag.leadItem?.isCoverPhoto && (
                       <div className="absolute top-1 left-1 bg-[#DFB260] text-[#120B21] p-0.5 rounded-full" title="Lead Photo Set">
@@ -894,6 +911,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
       )}
 
       {/* BENTO GRID GALLERY OF LIVE CONTENT */}
+      {memorySection === 'memories' && selectedGridPhotoIds.length > 0 && (
+        <div className="sticky top-20 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#F5D77F]/60 bg-[#160D27]/95 p-4 shadow-2xl backdrop-blur-xl" role="status">
+          <div><strong className="text-[#FFF2A8]">{selectedGridPhotoIds.length} {selectedGridPhotoIds.length === 1 ? 'memory' : 'memories'} selected</strong><p className="mt-1 text-sm text-[#C8B1E4]">They will stay in All memories after you add them to an album.</p></div>
+          <div className="flex gap-2"><button onClick={() => setSelectedGridPhotoIds([])} className="min-h-11 rounded-xl px-4 text-sm text-[#D8CCE8] hover:bg-white/10">Clear selection</button><button onClick={() => { recordUsabilityEvent('album_flow_opened'); setAlbumDestination(albumGroups.length ? 'existing' : 'new'); setExistingAlbumName(albumGroups[0]?.albumName || ''); setNewAlbumTitleInput(''); setIsGroupModalOpen(true); }} className="gold-filled-btn min-h-11 px-5 text-sm font-bold">Add to album</button></div>
+        </div>
+      )}
       {(memorySection === 'memories' || currentActiveAlbum) && filteredMemories.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(280px,42vh)] gap-4 pt-2">
           {filteredMemories.map((mem, idx) => {
@@ -944,6 +967,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <img
                       src={mem.imageUrl || "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800"}
                       alt={mem.title}
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       onClick={(e) => {
                         if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -977,12 +1002,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         <span>{isSelectedInGrid ? 'Selected' : 'Select'}</span>
                       </button>
 
-                      <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#120B21]/80 text-[#F5D77F] font-semibold border border-[#DFB260]/40 backdrop-blur-md">
-                        {mem.encryptionLevel}
-                      </span>
                       {mem.albumName && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#DFB260]/30 text-[#FFF2A8] font-bold border border-[#DFB260] backdrop-blur-md truncate max-w-[140px]">
-                          📁 {mem.albumName}
+                        <span className="rounded-full border border-[#DFB260] bg-[#DFB260]/30 px-2.5 py-1 text-xs font-bold text-[#FFF2A8] backdrop-blur-md truncate max-w-[180px]">
+                          Album: {mem.albumName}
                         </span>
                       )}
                       {mem.isCoverPhoto && (
@@ -994,49 +1016,17 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     </div>
 
                     <div className="flex items-center space-x-1">
-                      {mem.albumName && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenEditAlbum(mem.albumName!);
-                          }}
-                          className="w-8 h-8 rounded-full disabled:opacity-30 disabled:cursor-not-allowed bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
-                          title="Edit Album Details"
-                        >
-                          <FolderEdit className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (mem.permawebTxId) onSelectView('immortal');
-                        }}
-                        disabled={!mem.permawebTxId}
-                        className="w-8 h-8 rounded-full bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
-                        title={mem.permawebTxId ? "Immortal Gateway Independent Viewer" : "Not submitted to Arweave"}
-                      >
-                        <Globe className="w-3.5 h-3.5" />
-                      </button>
-
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedImage(mem);
                         }}
                         className="w-8 h-8 rounded-full bg-[#120B21]/80 hover:bg-[#DFB260] text-[#FFF2A8] hover:text-[#120B21] flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
-                        title="View Full Resolution"
+                        aria-label={`Open details for ${mem.title}`}
                       >
                         <Maximize2 className="w-3.5 h-3.5" />
                       </button>
 
-                      <button
-                        onClick={(e) => handleDeleteSingleMemory(mem.id, e)}
-                        className="w-8 h-8 rounded-full bg-[#120B21]/80 hover:bg-red-600 text-red-300 hover:text-white flex items-center justify-center transition-all backdrop-blur-md cursor-pointer border border-[#DFB260]/40"
-                        title="Delete Memory Item"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
 
@@ -1168,6 +1158,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
               <button type="button" onClick={handleDeleteAlbum} className="rounded-xl bg-rose-600 hover:bg-rose-500 px-5 py-2.5 text-xs font-bold text-white">
                 Delete Album & {albumToDelete.itemIds.length} {albumToDelete.itemIds.length === 1 ? "Item" : "Items"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {memoryToDelete && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="delete-memory-title" className="w-full max-w-md space-y-5 rounded-3xl border border-rose-400/60 bg-[#180E2B] p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-rose-400/40 bg-rose-500/15 text-rose-300"><Trash2 className="h-6 w-6" /></div>
+            <div className="space-y-2">
+              <h3 id="delete-memory-title" className="font-cinzel text-xl font-bold text-[#FFF2A8]">Move this memory to recovery?</h3>
+              <p className="text-sm text-[#C8B1E4]">“{memoryToDelete.title || 'Untitled memory'}” will leave your vault views but remain recoverable for 30 days.</p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setMemoryToDelete(null)} className="gold-beveled-btn min-h-11 px-5 text-xs text-[#FFF2A8]">Keep memory</button>
+              <button type="button" onClick={confirmDeleteSingleMemory} className="min-h-11 rounded-xl bg-rose-600 px-5 text-xs font-bold text-white hover:bg-rose-500">Move to recovery</button>
             </div>
           </div>
         </div>
@@ -1582,39 +1588,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
             <div className="space-y-1">
               <div className="inline-flex items-center space-x-1.5 text-xs font-mono text-[#F5D77F] font-bold uppercase">
                 <FolderPlus className="w-4 h-4 text-[#F5D77F]" />
-                <span>Batch Album Creation</span>
+                <span>Album organization</span>
               </div>
               <h3 className="font-cinzel font-bold text-2xl text-[#FFF2A8]">
-                Group Items Into Album
+                Add selected memories to an album
               </h3>
-              <p className="text-xs text-[#C8B1E4]">
-                This will group <strong className="text-[#F5D77F]">{filteredMemories.length} visible photos</strong> under a unified Album Title.
+              <p className="text-sm leading-6 text-[#C8B1E4]">
+                <strong className="text-[#F5D77F]">{selectedGridPhotoIds.length} selected memories</strong> will appear in the album and remain available in All memories.
               </p>
             </div>
 
-            <form onSubmit={handleGroupAlbumSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">
-                  Album Collection Title
-                </label>
-                <input
-                  type="text"
-                  value={newAlbumTitleInput}
-                  onChange={(e) => setNewAlbumTitleInput(e.target.value)}
-                  placeholder="e.g. Cape Cod Family Reunion 2024 Album"
-                  className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium"
-                  required
-                />
-              </div>
+            <form onSubmit={handleGroupAlbumSubmit} className="space-y-4 text-sm">
+              {albumGroups.length > 0 && <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#120B21] p-1"><button type="button" onClick={() => setAlbumDestination('existing')} className={`min-h-11 rounded-lg font-bold ${albumDestination === 'existing' ? 'bg-[#F5D77F] text-[#120B21]' : 'text-[#D8CCE8]'}`}>Existing album</button><button type="button" onClick={() => setAlbumDestination('new')} className={`min-h-11 rounded-lg font-bold ${albumDestination === 'new' ? 'bg-[#F5D77F] text-[#120B21]' : 'text-[#D8CCE8]'}`}>New album</button></div>}
+              {albumDestination === 'existing' && albumGroups.length > 0 ? <div><label htmlFor="album-destination" className="mb-2 block font-semibold text-[#FFF2A8]">Choose an album</label><select id="album-destination" value={existingAlbumName} onChange={e => setExistingAlbumName(e.target.value)} className="min-h-12 w-full rounded-xl border border-[#DFB260]/40 bg-[#120B21] px-4 text-[#FFF2A8]">{albumGroups.map(album => <option key={album.albumName} value={album.albumName}>{album.albumName} ({album.count})</option>)}</select></div> : <div><label htmlFor="new-album-title" className="mb-2 block font-semibold text-[#FFF2A8]">New album name</label><input id="new-album-title" type="text" value={newAlbumTitleInput} onChange={(e) => setNewAlbumTitleInput(e.target.value)} placeholder="Example: Cape Cod reunion 2024" className="min-h-12 w-full rounded-xl border border-[#DFB260]/40 bg-[#120B21] px-4 text-[#FFF2A8] placeholder-[#C8B1E4]/55 focus:border-[#F5D77F] focus:outline-none" required /></div>}
 
-              <div className="bg-[#120B21] p-3 rounded-2xl border border-[#DFB260]/30 text-[11px] text-[#C8B1E4] space-y-1">
-                <div className="text-[#F5D77F] font-semibold">Included Photos Preview:</div>
+              <div className="bg-[#120B21] p-3 rounded-2xl border border-[#DFB260]/30 text-sm text-[#C8B1E4] space-y-1">
+                <div className="text-[#F5D77F] font-semibold">Selected memories</div>
                 <div className="flex items-center space-x-2 overflow-x-auto py-1">
-                  {filteredMemories.slice(0, 5).map(m => (
-                    <img key={m.id} src={m.imageUrl} alt={m.title} className="w-8 h-8 rounded-lg object-cover border border-[#DFB260]/30" />
+                  {memories.filter(m => selectedGridPhotoIds.includes(m.id)).slice(0, 5).map(m => (
+                    <img key={m.id} src={m.imageUrl} alt={m.title} className="w-12 h-12 rounded-lg object-cover border border-[#DFB260]/30" />
                   ))}
-                  {filteredMemories.length > 5 && (
-                    <span className="text-[10px] text-[#F5D77F] font-mono">+{filteredMemories.length - 5} more</span>
+                  {selectedGridPhotoIds.length > 5 && (
+                    <span className="text-xs text-[#F5D77F]">+{selectedGridPhotoIds.length - 5} more</span>
                   )}
                 </div>
               </div>
@@ -1623,15 +1618,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsGroupModalOpen(false)}
-                  className="gold-beveled-btn px-4 py-2 text-xs text-[#FFF2A8]"
+                  className="gold-beveled-btn min-h-11 px-4 text-sm text-[#FFF2A8]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="gold-filled-btn px-5 py-2 text-xs font-bold uppercase"
+                  disabled={!selectedGridPhotoIds.length || (albumDestination === 'existing' ? !existingAlbumName : !newAlbumTitleInput.trim())}
+                  className="gold-filled-btn min-h-11 px-5 text-sm font-bold disabled:opacity-40"
                 >
-                  Seal Into Album
+                  Add to album
                 </button>
               </div>
             </form>
