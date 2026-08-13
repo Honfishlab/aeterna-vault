@@ -24,3 +24,15 @@ test('dashboard cards are keyboard-accessible actions with familiar labels', asy
   await expect(page.getByRole('button',{name:/Family Access Invite trusted people/i})).toBeVisible();
   await expect(page.getByText(/Permanent archive status is shown only when it can be verified/i)).toBeVisible();
 });
+
+test('memories separates albums from tag filters', async ({ page }) => {
+  await page.goto('/#search');
+  await expect(page.getByRole('tab', { name: /All memories/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Albums/ })).toBeVisible();
+  await expect(page.getByText('Filter memories by tag')).toBeVisible();
+
+  await page.getByRole('tab', { name: /Albums/ }).click();
+  await expect(page.getByRole('heading', { name: 'Albums', exact: true })).toBeVisible();
+  await expect(page.getByText('Filter memories by tag')).toHaveCount(0);
+  await expect(page.getByText(/Tags narrow the memory list/)).toHaveCount(0);
+});
