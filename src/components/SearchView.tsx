@@ -62,6 +62,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   onRestoreDemoContent,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
+  const [memorySection, setMemorySection] = useState<'memories' | 'albums'>('memories');
   const [selectedImage, setSelectedImage] = useState<MemoryItem | null>(null);
   const [mediaProcessing, setMediaProcessing] = useState<Record<string, string>>({});
   const [showLightboxInfo, setShowLightboxInfo] = useState(false);
@@ -331,6 +332,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
     return list;
   }, [memories]);
 
+  const tagFilterOptions = useMemo(
+    () => dynamicFilterOptions.filter(option => !option.isAlbum),
+    [dynamicFilterOptions]
+  );
+
   // Filter memories based on search query AND active selected tag/album
   const filteredMemories = useMemo(() => {
     const q = activeQuery.trim().toLowerCase();
@@ -412,7 +418,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const albumGroups = useMemo(() => {
     const map = new Map<string, MemoryItem[]>();
     memories.forEach(m => {
-      const key = m.albumName || (m.tags && m.tags[0]) || m.category || 'General Memories';
+      const key = m.albumName?.trim();
+      if (!key) return;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(m);
     });
@@ -428,6 +435,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
       };
     });
   }, [memories]);
+
+  const visibleAlbumGroups = useMemo(() => {
+    const query = activeQuery.trim().toLowerCase();
+    if (!query) return albumGroups;
+    return albumGroups.filter(album => album.albumName.toLowerCase().includes(query));
+  }, [albumGroups, activeQuery]);
 
   // Check if active selectedFilter is an explicit Album
   const currentActiveAlbum = useMemo(() => {
@@ -642,7 +655,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <span className="text-[#C8B1E4]">Memories</span>
           <span>/</span>
           <span className="text-[#FFF2A8]">
-            {activeQuery ? `Search: "${activeQuery}"` : selectedFilter !== 'All' ? `Album: ${selectedFilter}` : 'All Index'}
+            {activeQuery ? `Search: "${activeQuery}"` : currentActiveAlbum ? currentActiveAlbum.albumName : memorySection === 'albums' ? 'Albums' : 'All memories'}
           </span>
         </div>
 
@@ -651,11 +664,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-bold text-[#FFF2A8] tracking-wide drop-shadow-[0_2px_12px_rgba(223,178,96,0.35)] flex items-center gap-2">
               <Images className="w-7 h-7 text-[#F5D77F] flex-shrink-0" />
               <span>
-                {activeQuery 
+                {activeQuery && memorySection !== 'albums'
                   ? `Search Results: "${activeQuery}"` 
-                  : selectedFilter !== 'All' 
-                  ? `Album: ${selectedFilter}` 
-                  : 'Vault Memories & Permaweb Albums'}
+                  : currentActiveAlbum
+                  ? currentActiveAlbum.albumName
+                  : memorySection === 'albums'
+                  ? 'Albums'
+                  : 'All memories'}
               </span>
             </h1>
 
@@ -669,9 +684,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             })()}
 
             <p className="text-xs sm:text-sm text-[#C8B1E4] font-medium flex items-center gap-2">
-              <span>Showing <strong className="text-[#F5D77F]">{filteredMemories.length}</strong> {filteredMemories.length === 1 ? 'entry' : 'entries'} in live vault index</span>
-              <span>•</span>
-              <span className="text-[#DFB260]/80">{memories.length} total preserved items</span>
+              <span>{currentActiveAlbum ? `${filteredMemories.length} ${filteredMemories.length === 1 ? 'memory' : 'memories'} in this album` : memorySection === 'albums' ? `${visibleAlbumGroups.length} of ${albumGroups.length} albums` : `${filteredMemories.length} of ${memories.length} memories`}</span>
             </p>
           </div>
 
@@ -696,7 +709,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               </button>
             )}
 
-            <button
+            {memorySection === 'memories' && !currentActiveAlbum && <button
               onClick={() => {
                 setNewAlbumTitleInput(activeQuery ? `${activeQuery} Album Collection` : 'New Album Collection');
                 setIsGroupModalOpen(true);
@@ -705,17 +718,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
               className="flex items-center space-x-1.5 gold-beveled-btn px-4 py-2.5 rounded-2xl text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FolderPlus className="w-4 h-4 text-[#F5D77F]" />
-              <span>Group ({filteredMemories.length}) into Album</span>
-            </button>
+                <span>Create album from {filteredMemories.length}</span>
+            </button>}
 
             <button
               onClick={onOpenUpload}
               className="flex items-center space-x-1.5 gold-filled-btn px-5 py-2.5 rounded-2xl text-xs cursor-pointer shadow-md"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Add Photos / Album</span>
+              <span>Add memories</span>
             </button>
           </div>
+        </div>
+
+        <div className="flex w-full gap-2 border-b border-[#DFB260]/25 pt-2" role="tablist" aria-label="Memory sections">
+          <button role="tab" aria-selected={memorySection === 'memories' && !currentActiveAlbum} onClick={() => { setMemorySection('memories'); setSelectedFilter('All'); }} className={`min-h-11 border-b-2 px-4 text-sm font-bold ${memorySection === 'memories' && !currentActiveAlbum ? 'border-[#F5D77F] text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:text-white'}`}>All memories <span className="ml-1 text-xs opacity-75">{memories.length}</span></button>
+          <button role="tab" aria-selected={memorySection === 'albums' || Boolean(currentActiveAlbum)} onClick={() => { setMemorySection('albums'); setSelectedFilter('All'); handleSearchInput(''); }} className={`min-h-11 border-b-2 px-4 text-sm font-bold ${memorySection === 'albums' || currentActiveAlbum ? 'border-[#F5D77F] text-[#FFF2A8]' : 'border-transparent text-[#C8B1E4] hover:text-white'}`}>Albums <span className="ml-1 text-xs opacity-75">{albumGroups.length}</span></button>
         </div>
 
         {/* Live Search Input Bar */}
@@ -725,7 +743,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               type="text"
               value={localSearch}
               onChange={(e) => handleSearchInput(e.target.value)}
-              placeholder="Search by photo title, album, tag, location, date, or story text..."
+              placeholder={memorySection === 'albums' && !currentActiveAlbum ? 'Search albums by name…' : 'Search memories by title, person, place, date, or tag…'}
               className="w-full bg-[#1A0D33] border border-[#DFB260]/40 rounded-2xl pl-10 pr-10 py-3 text-xs sm:text-sm text-[#FFF2A8] placeholder-[#C8B1E4]/50 focus:outline-none focus:border-[#F5D77F] transition-all font-medium shadow-inner"
             />
             <Search className="w-4 h-4 text-[#F5D77F] absolute left-3.5 top-3.5" />
@@ -770,18 +788,18 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
       )}
 
-      {/* Dynamic Suggested Album Titles & Tags Bar */}
-      <div className="space-y-2">
+      {/* Tags are filters, never albums. */}
+      {memorySection === 'memories' && !currentActiveAlbum && <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-mono uppercase font-bold tracking-wider text-[#F5D77F] flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5" />
-            <span>Suggested Album Titles & Topics ({dynamicFilterOptions.length - 1})</span>
+            <span>Filter memories by tag</span>
           </span>
-          <span className="text-[10px] text-[#C8B1E4]/70">Click filter to isolate album items</span>
+          <span className="text-[10px] text-[#C8B1E4]/70">Tags narrow the memory list; they do not create albums.</span>
         </div>
 
         <div className="flex items-center space-x-2 overflow-x-auto pb-2 no-scrollbar">
-          {dynamicFilterOptions.map((opt) => {
+          {tagFilterOptions.map((opt) => {
             const isSelected = selectedFilter.toLowerCase() === opt.name.toLowerCase();
             return (
               <button
@@ -793,11 +811,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     : 'bg-[#180E2B] text-[#C8B1E4] hover:text-[#FFF2A8] hover:bg-[#251543] border border-[#DFB260]/30'
                 }`}
               >
-                {opt.isAlbum ? (
-                  <Layers className={`w-3.5 h-3.5 ${isSelected ? 'text-[#120B21]' : 'text-[#F5D77F]'}`} />
-                ) : (
-                  <Tag className={`w-3 h-3 ${isSelected ? 'text-[#120B21]' : 'text-[#DFB260]'}`} />
-                )}
+                <Tag className={`w-3 h-3 ${isSelected ? 'text-[#120B21]' : 'text-[#DFB260]'}`} />
                 <span>{opt.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                   isSelected ? 'bg-[#120B21]/20 text-[#120B21]' : 'bg-[#DFB260]/20 text-[#F5D77F]'
@@ -808,22 +822,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Album Cards Row (Top album collections) */}
-      {albumGroups.length > 0 && selectedFilter === 'All' && !activeQuery && (
+      {visibleAlbumGroups.length > 0 && memorySection === 'albums' && selectedFilter === 'All' && (
         <div className="space-y-3 pt-1">
           <span className="text-[11px] font-mono uppercase font-bold tracking-wider text-[#F5D77F] block">
-            📁 Vault Album Collections ({albumGroups.length})
+            Your albums
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {albumGroups.map((ag) => (
+            {visibleAlbumGroups.map((ag) => (
               <div
                 key={ag.albumName}
                 className="bg-[#180E2B] hover:bg-[#23133e] border border-[#DFB260]/30 hover:border-[#F5D77F] rounded-2xl p-3.5 flex items-center justify-between transition-all group shadow-md"
               >
                 <div 
-                  onClick={() => setSelectedFilter(ag.albumName)}
+                  onClick={() => { setMemorySection('albums'); setSelectedFilter(ag.albumName); }}
                   className="flex items-center space-x-3.5 flex-1 min-w-0 cursor-pointer"
                 >
                   <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-[#DFB260]/40 flex-shrink-0 bg-[#120B21]">
@@ -846,7 +860,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       return <span className={`inline-flex mt-1 rounded-full px-2 py-0.5 text-[8px] uppercase tracking-wide ${failed ? "bg-rose-500/20 text-rose-200" : pending ? "bg-amber-400/20 text-amber-100" : "bg-emerald-500/20 text-emerald-200"}`}>{failed ? "Complete with issues" : pending ? `Optimizing ${pending}` : "Complete"}</span>;
                     })()}
                     <p className="text-[10px] text-[#C8B1E4]/70 font-mono mt-0.5">
-                      {ag.count} {ag.count === 1 ? 'Item' : 'Items'} • Shared Timestamp
+                      {ag.count} {ag.count === 1 ? 'memory' : 'memories'}
                     </p>
                     <span className="inline-block mt-1 text-[9px] text-[#F5D77F] font-semibold underline group-hover:translate-x-0.5 transition-transform">
                       View Album →
@@ -880,7 +894,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       )}
 
       {/* BENTO GRID GALLERY OF LIVE CONTENT */}
-      {filteredMemories.length > 0 ? (
+      {(memorySection === 'memories' || currentActiveAlbum) && filteredMemories.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(280px,42vh)] gap-4 pt-2">
           {filteredMemories.map((mem, idx) => {
             const isSelectedInGrid = selectedGridPhotoIds.includes(mem.id);
@@ -1075,7 +1089,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
             );
           })}
         </div>
-      ) : (
+      )}
+
+      {(memorySection === 'memories' || currentActiveAlbum) && filteredMemories.length === 0 && (
         /* LIVE EMPTY STATE WHEN NO RESULTS MATCH */
         <div className="cosmic-card-gold p-8 sm:p-12 text-center space-y-5 border border-[#DFB260]">
           <div className="w-16 h-16 rounded-2xl bg-[#DFB260]/20 border border-[#DFB260]/40 text-[#F5D77F] flex items-center justify-center mx-auto">
@@ -1084,12 +1100,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
           <div className="space-y-1 max-w-md mx-auto">
             <h3 className="font-cinzel font-bold text-2xl text-[#FFF2A8]">
-              No Matching Memories Found
+              No matching memories
             </h3>
             <p className="text-xs text-[#C8B1E4] font-medium leading-relaxed">
               {activeQuery || selectedFilter !== 'All' 
-                ? `No entries in your vault index matched "${activeQuery || selectedFilter}". Try resetting your filter or upload new files.`
-                : 'Your Vault storage is currently clear. Upload new family photos or restore demo contents.'}
+                ? `No memories matched “${activeQuery || selectedFilter}”. Clear the filter or add a new memory.`
+                : 'Your vault is empty. Add your first photo, video, letter, or story.'}
             </p>
           </div>
 
@@ -1111,7 +1127,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               className="gold-filled-btn px-6 py-2.5 text-xs cursor-pointer flex items-center space-x-2"
             >
               <Upload className="w-4 h-4" />
-              <span>Upload New Photos / Album</span>
+              <span>Add memories</span>
             </button>
 
             {memories.length === 0 && onRestoreDemoContent && (
@@ -1124,6 +1140,14 @@ export const SearchView: React.FC<SearchViewProps> = ({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {memorySection === 'albums' && !currentActiveAlbum && visibleAlbumGroups.length === 0 && (
+        <div className="cosmic-card-gold space-y-4 border border-[#DFB260] p-8 text-center sm:p-12">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#DFB260]/40 bg-[#DFB260]/20 text-[#F5D77F]"><Images className="h-8 w-8" /></div>
+          <div><h3 className="font-cinzel text-2xl font-bold text-[#FFF2A8]">{activeQuery ? 'No matching albums' : 'No albums yet'}</h3><p className="mx-auto mt-2 max-w-md text-sm text-[#C8B1E4]">{activeQuery ? `No album name matched “${activeQuery}”.` : 'Albums are named groups of memories. Start in All memories, filter or select what belongs together, then create an album.'}</p></div>
+          <button onClick={() => { setMemorySection('memories'); handleSearchInput(''); }} className="gold-filled-btn min-h-11 px-6 text-sm">Go to all memories</button>
         </div>
       )}
 
