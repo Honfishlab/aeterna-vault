@@ -589,10 +589,10 @@ export const InheritanceView: React.FC<InheritanceViewProps> = ({
                         <button
                           onClick={() => onSelectView('immortal')}
                           className="flex items-center space-x-1 text-[#F5D77F] font-semibold hover:underline cursor-pointer bg-[#0A0514] px-2 py-0.5 rounded-lg border border-[#DFB260]/30 text-[11px]"
-                          title="View in Immortal Gateway Independent Viewer"
+                          title="View in the permanent archive"
                         >
                           <Globe className="w-3.5 h-3.5 text-[#F5D77F]" />
-                          <span>Immortal Gateway</span>
+                          <span>Permanent archive</span>
                         </button>
                         <button
                           onClick={() => alert(`Downloading verified Arweave heirloom asset ${mem.permawebTxId}`)}

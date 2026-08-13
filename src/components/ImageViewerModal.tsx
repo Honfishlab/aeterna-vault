@@ -187,12 +187,12 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           </div>
           <div className="truncate">
             <h4 className="font-cinzel font-bold text-sm sm:text-base text-[#FFF2A8] truncate">
-              {image.title || 'Untitled Memory Asset'}
+              {image.title || 'Untitled memory'}
             </h4>
             <div className="flex items-center space-x-2 text-[10px] font-mono text-[#F5D77F]">
-              <span>{image.category || 'Personal'}</span>
+              <span>{image.albumName ? `Album: ${image.albumName}` : image.category || 'Personal'}</span>
               <span>•</span>
-              <span>{txId ? "Arweave Tx: " + txId.slice(0, 10) + "..." : "Storage: " + (archiveStatus === "r2_only" ? "Private R2 only" : archiveStatus || "not archived")}</span>
+              <span>{txId ? 'Permanently archived' : archiveStatus === 'r2_only' ? 'Private vault' : 'Archive pending'}</span>
             </div>
           </div>
         </div>
@@ -214,10 +214,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 onSelectView('immortal');
               }}
               className="p-2 rounded-full hover:bg-white/10 text-[#F5D77F] hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 px-3 bg-white/10 border border-[#DFB260]/40"
-              title="Immortal Gateway Independent Viewer"
+              title="Open this memory in the permanent archive"
             >
               <Globe className="w-4 h-4 text-[#F5D77F]" />
-              <span className="text-xs font-mono font-bold hidden sm:inline">Immortal Gateway</span>
+              <span className="text-xs font-semibold hidden sm:inline">Permanent archive</span>
             </button>
           )}
 
@@ -248,12 +248,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
           <button
             onClick={() => setShowInfo(prev => !prev)}
-            className={`p-2 rounded-full transition-colors cursor-pointer ${
+            className={`min-h-11 px-3 rounded-full transition-colors cursor-pointer flex items-center gap-2 ${
               showInfo ? 'bg-[#DFB260] text-black font-bold shadow-lg' : 'hover:bg-white/10 text-white/90'
             }`}
-            title="Toggle Details Info Sidebar"
+            title="View or edit memory details"
           >
             <Info className="w-5 h-5" />
+            <span className="hidden sm:inline text-xs font-semibold">Details</span>
           </button>
 
           {onDelete && image.id && (

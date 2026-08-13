@@ -729,13 +729,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <div className="space-y-1">
             <div className="inline-flex items-center space-x-2 text-[#F5D77F] text-xs font-mono font-semibold uppercase tracking-wider">
               <Upload className="w-3.5 h-3.5 text-[#F5D77F]" />
-              <span>Immutable Archival Wizard</span>
+              <span>Add to your vault</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-cinzel font-bold text-[#FFF2A8]">
-              {uploadMode === 'album' ? 'Upload Album Collection' : 'Add New Memory Entry'}
+              {uploadMode === 'album' ? 'Add several memories' : 'Add a memory'}
             </h2>
             <p className="text-xs text-[#C8B1E4]/80 font-medium">
-              Files will be encrypted client-side and broadcast permanently to the Arweave permaweb.
+              Choose what to save now. Storage and privacy details can be reviewed before you finish.
             </p>
           </div>
 
@@ -751,7 +751,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>Single File</span>
+              <span>One memory</span>
             </button>
 
             <button
@@ -764,7 +764,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FolderPlus className="w-4 h-4" />
-              <span>Batch Album</span>
+              <span>Several memories</span>
             </button>
 
             <button type="button" onClick={() => setCloudImportOpen(true)} className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center space-x-2 text-[#F5D77F] hover:text-[#FFF2A8] hover:bg-white/5 border border-[#DFB260]/30 transition-all cursor-pointer">
@@ -794,11 +794,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <div>
               {uploadMode === 'single' ? (
                 <p>
-                  <strong className="text-[#FFF2A8]">Single Item Mode:</strong> Upload a standalone photo, video, or document with its own title and metadata.
+                  <strong className="text-[#FFF2A8]">One memory:</strong> Add a photo, video, or document and describe it in your own words.
                 </p>
               ) : (
                 <p>
-                  <strong className="text-[#FFF2A8]">Batch Album Mode:</strong> Upload groups of files together into one Album under a single Album Title. All files inherit the same date, time, location, story, category, and encryption settings.
+                  <strong className="text-[#FFF2A8]">Several memories:</strong> Add multiple files to one named album. Shared details apply to every item and can be edited later.
                 </p>
               )}
             </div>
@@ -1079,8 +1079,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     <Wand2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-cinzel font-bold text-[#FFF2A8] text-sm block">AI Photo &amp; Video Auto-Tagging</span>
-                    <span className="text-[10px] text-[#C8B1E4]/80 font-mono block">Analyze media for people, locations &amp; categorical metadata</span>
+                    <span className="font-cinzel font-bold text-[#FFF2A8] text-sm block">Help organize these memories</span>
+                    <span className="text-[10px] text-[#C8B1E4]/80 block">Optional: suggest useful tags from the files you selected.</span>
                   </div>
                 </div>
 
@@ -1098,7 +1098,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5 text-[#120B21]" />
-                      <span>⚡ Run AI Auto-Tag</span>
+                      <span>Suggest tags</span>
                     </>
                   )}
                 </button>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ViewMode, MemoryItem, UserProfile, MemorialShrine, Heir } from '../types';
 import { StorageUsageDashboard } from './StorageUsageDashboard';
-import { Archive, ArrowRight, BookOpen, CheckCircle2, FileText, Images, Plus, RotateCcw, Sparkles, Trash2, Users, Video } from 'lucide-react';
+import { Archive, ArrowRight, BookOpen, Check, CheckCircle2, Circle, FileText, Images, Plus, RotateCcw, Sparkles, Trash2, Users, Video } from 'lucide-react';
 
 interface DashboardViewProps {
   onSelectView: (view: ViewMode) => void;
@@ -30,6 +30,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectView,onOpe
     {id:'inheritance' as ViewMode,title:'Family Access',description:'Invite trusted people and plan future access.',meta:`${heirs.length} people`,icon:Users},
     {id:'immortal' as ViewMode,title:'Permanent Archive',description:'Review files submitted for permanent storage.',meta:'View archive',icon:Archive},
   ];
+  const setupSteps=[
+    {done:memories.length>0,label:'Add your first memory',action:onOpenUpload},
+    {done:memories.some(memory=>Boolean(memory.albumName)),label:'Create an album',action:()=>onSelectView('search')},
+    {done:heirs.length>0,label:'Invite a trusted family member',action:()=>onSelectView('inheritance')},
+  ];
+  const completedSteps=setupSteps.filter(step=>step.done).length;
   return <div id="dashboard-view" className="space-y-8 pb-28 text-[#E8DDF5] md:pb-16">
     {notice&&<div role="status" className="flex items-center justify-between rounded-2xl border border-emerald-500/40 bg-emerald-950/80 p-4 text-sm text-emerald-100"><span className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5"/>{notice}</span><button onClick={()=>setNotice(null)} className="min-h-11 px-3 underline">Dismiss</button></div>}
 
@@ -40,6 +46,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectView,onOpe
         <div className="flex flex-wrap gap-3"><button id="btn-dashboard-new-entry" onClick={onOpenUpload} className="flex min-h-12 items-center gap-2 rounded-xl bg-[#F5D77F] px-5 font-bold text-[#120B21] hover:bg-[#FFF2A8]"><Plus className="h-5 w-5"/>Add a memory</button>{onOpenVideoRecorder&&<button id="btn-dashboard-record-video" onClick={onOpenVideoRecorder} className="flex min-h-12 items-center gap-2 rounded-xl border border-[#DFB260]/50 bg-[#28134D] px-5 font-semibold text-white"><Video className="h-5 w-5"/>Record a story</button>}</div>
       </div>
     </section>
+
+    {completedSteps < setupSteps.length && <section aria-labelledby="setup-title" className="rounded-2xl border border-[#DFB260]/30 bg-[#160D27]/92 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-[#F5D77F]">Getting started</p><h2 id="setup-title" className="mt-1 text-xl font-bold text-[#FFF2A8]">Set up your family vault</h2><p className="mt-2 text-sm text-[#D8CCE8]">{completedSteps} of {setupSteps.length} complete</p></div><div className="h-2 w-40 overflow-hidden rounded-full bg-black/30" aria-hidden="true"><div className="h-full bg-[#F5D77F]" style={{width:`${completedSteps/setupSteps.length*100}%`}}/></div></div><div className="mt-5 grid gap-2 sm:grid-cols-3">{setupSteps.map(step=><button key={step.label} onClick={step.action} className="flex min-h-14 items-center gap-3 rounded-xl border border-[#DFB260]/25 px-4 text-left text-sm hover:border-[#F5D77F]">{step.done?<Check className="h-5 w-5 text-emerald-300"/>:<Circle className="h-5 w-5 text-[#C8B1E4]"/>}<span className={step.done?'text-[#C8B1E4] line-through':'font-semibold text-[#FFF2A8]'}>{step.label}</span></button>)}</div></section>}
 
     <section aria-labelledby="vault-title"><div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-semibold text-[#F5D77F]">Everything in one place</p><h2 id="vault-title" className="text-2xl font-bold text-[#FFF2A8]">Your Vault</h2></div><button onClick={()=>onSelectView('search')} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[#FFF2A8] hover:bg-white/5">Browse all memories →</button></div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(card=>{const Icon=card.icon;return <button key={card.id} id={`vault-card-${card.id}`} onClick={()=>onSelectView(card.id)} className="group min-h-48 rounded-2xl border border-[#DFB260]/30 bg-[#160D27]/92 p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:border-[#F5D77F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FFF2A8]"><div className="flex items-start justify-between"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#DFB260]/15 text-[#F5D77F]"><Icon className="h-5 w-5"/></span><ArrowRight className="h-5 w-5 text-[#F5D77F] transition group-hover:translate-x-1"/></div><h3 className="mt-5 text-xl font-bold text-[#FFF2A8]">{card.title}</h3><p className="mt-2 text-sm leading-6 text-[#D8CCE8]">{card.description}</p><p className="mt-4 text-sm font-semibold text-[#F5D77F]">{card.meta}</p></button>})}</div>
