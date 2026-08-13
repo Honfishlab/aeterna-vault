@@ -726,16 +726,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           </button>
 
           {/* Modal Header */}
-          <div className="space-y-1">
+          <div className="space-y-1 pr-10">
             <div className="inline-flex items-center space-x-2 text-[#F5D77F] text-xs font-mono font-semibold uppercase tracking-wider">
               <Upload className="w-3.5 h-3.5 text-[#F5D77F]" />
-              <span>Add to your vault</span>
+              <span>New memory</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-cinzel font-bold text-[#FFF2A8]">
-              {uploadMode === 'album' ? 'Add several memories' : 'Add a memory'}
+              {uploadMode === 'album' ? 'Create an album' : 'Add a memory'}
             </h2>
             <p className="text-xs text-[#C8B1E4]/80 font-medium">
-              Choose what to save now. Storage and privacy details can be reviewed before you finish.
+              {uploadMode === 'album'
+                ? 'Choose a group of photos or files, then add the details you want to remember.'
+                : 'Choose a photo, video, or document and tell the story behind it.'}
             </p>
           </div>
 
@@ -751,7 +753,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>One memory</span>
+              <span>Single memory</span>
             </button>
 
             <button
@@ -764,11 +766,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               }`}
             >
               <FolderPlus className="w-4 h-4" />
-              <span>Several memories</span>
+              <span>Create an album</span>
             </button>
 
             <button type="button" onClick={() => setCloudImportOpen(true)} className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center space-x-2 text-[#F5D77F] hover:text-[#FFF2A8] hover:bg-white/5 border border-[#DFB260]/30 transition-all cursor-pointer">
-              <Cloud className="w-4 h-4" /><span>Cloud Import</span>
+              <Cloud className="w-4 h-4" /><span>Import</span>
             </button>
 
             {onOpenVideoRecorder && (
@@ -781,27 +783,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-xl flex items-center justify-center space-x-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold transition-all cursor-pointer shadow-md border border-amber-400/40"
               >
                 <Camera className="w-4 h-4 text-amber-200 animate-pulse" />
-                <span>Live Record</span>
+                <span>Record video</span>
               </button>
             )}
           </div>
 
           <BackgroundImportProgress onImported={handleCloudImported} onStatusChange={setCloudActivity} />
 
-          {/* Mode Banner Explanation */}
-          <div className="bg-[#1A0C33] p-3 rounded-2xl border border-[#DFB260]/30 flex items-start space-x-2.5 text-xs text-[#C8B1E4]">
-            <Sparkles className="w-4 h-4 text-[#F5D77F] flex-shrink-0 mt-0.5" />
-            <div>
-              {uploadMode === 'single' ? (
-                <p>
-                  <strong className="text-[#FFF2A8]">One memory:</strong> Add a photo, video, or document and describe it in your own words.
-                </p>
-              ) : (
-                <p>
-                  <strong className="text-[#FFF2A8]">Several memories:</strong> Add multiple files to one named album. Shared details apply to every item and can be edited later.
-                </p>
-              )}
-            </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px]" aria-label="Three steps to save a memory">
+            {['1  Choose', '2  Describe', '3  Save privately'].map((step, index) => (
+              <div key={step} className={`rounded-xl border px-3 py-2 text-center font-semibold ${index === 0 ? 'border-[#F5D77F] bg-[#DFB260]/15 text-[#FFF2A8]' : 'border-[#DFB260]/20 bg-[#120B21]/60 text-[#C8B1E4]'}`}>
+                {step}
+              </div>
+            ))}
           </div>
 
           <form onSubmit={handleStartArchiving} className="space-y-4 text-xs font-sans">
@@ -809,13 +803,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             {/* Title / Album Title */}
             <div>
               <label className="block text-[#FFF2A8] font-semibold mb-1">
-                {uploadMode === 'album' ? 'Album Title' : 'Memory Title'}
+                {uploadMode === 'album' ? 'Album name' : 'What would you like to call this memory?'}
+                <span className="ml-1 text-[#C8B1E4]/60 font-normal">Required</span>
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={uploadMode === 'album' ? "e.g., Cape Cod Family Reunion 2024 Album" : "e.g., Summer Coast Family Gathering 2024"}
+                placeholder={uploadMode === 'album' ? "e.g., Cape Cod family reunion" : "e.g., Sunday afternoon with Grandma"}
                 className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium transition-all"
                 required
               />
@@ -824,7 +819,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             {/* Category, Date, Time, Location */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Category</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">Type</label>
                 <select
                   value={category}
                   onChange={(e: any) => setCategory(e.target.value)}
@@ -839,7 +834,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Date</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">When was this?</label>
                 <input
                   type="date"
                   value={date}
@@ -850,7 +845,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Time (Optional)</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">Time <span className="text-[#C8B1E4]/60 font-normal">Optional</span></label>
                 <div className="relative">
                   <input
                     type="time"
@@ -863,7 +858,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Location</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">Where? <span className="text-[#C8B1E4]/60 font-normal">Optional</span></label>
                 <input
                   type="text"
                   value={location}
@@ -888,7 +883,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[#FFF2A8] font-semibold">
-                  {uploadMode === 'album' ? 'Album Files & Photos' : 'Select Memory File'}
+                  {uploadMode === 'album' ? 'Choose photos or files' : 'Choose a photo, video, or document'}
                 </label>
                 {uploadMode === 'album' && albumFiles.length > 0 && (
                   <span className="text-[11px] font-mono font-bold text-[#F5D77F] bg-[#DFB260]/20 px-2.5 py-0.5 rounded-full border border-[#DFB260]/40">
@@ -922,8 +917,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     <>
                       <Upload className="w-8 h-8 text-[#F5D77F] mx-auto" />
                       <div>
-                        <p className="text-[#FFF2A8] font-semibold font-cinzel text-base">Drag and drop family photo or document</p>
-                        <p className="text-[11px] text-[#C8B1E4]/80 font-mono mt-0.5">Click to browse • RAW, JPEG, PNG, MP4, PDF up to 5 GB</p>
+                        <p className="text-[#FFF2A8] font-semibold text-base">Drop a file here, or click to choose</p>
+                        <p className="text-[11px] text-[#C8B1E4]/80 mt-1">Photos, videos, and PDFs up to 5 GB</p>
                       </div>
                     </>
                   )}
@@ -933,7 +928,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                       type="text"
                       value={singleImageUrl}
                       onChange={(e) => setSingleImageUrl(e.target.value)}
-                      placeholder="Or paste external image URL (Unsplash, Arweave gateway...)"
+                      placeholder="Or paste a link to an image"
                       className="w-full max-w-md bg-[#1e1035] border border-[#DFB260]/30 rounded-xl p-2.5 text-center text-xs text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] mx-auto font-medium shadow-sm"
                     />
                   </div>
@@ -1071,16 +1066,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               )}
             </div>
 
-            {/* AI AUTO-TAGGING TRIGGER BUTTON & REAL-TIME PROGRESS INDICATOR */}
-            <div className="bg-[#120B21]/90 p-4 rounded-2xl border border-[#DFB260]/40 space-y-3 shadow-lg">
+            {/* Optional organization assistance */}
+            <div className="bg-[#120B21]/70 p-4 rounded-2xl border border-[#DFB260]/25 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
                   <div className="p-1.5 rounded-lg bg-[#DFB260]/20 text-[#F5D77F] border border-[#DFB260]/40">
                     <Wand2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-cinzel font-bold text-[#FFF2A8] text-sm block">Help organize these memories</span>
-                    <span className="text-[10px] text-[#C8B1E4]/80 block">Optional: suggest useful tags from the files you selected.</span>
+                    <span className="font-semibold text-[#FFF2A8] text-sm block">Want help filling in the details?</span>
+                    <span className="text-[10px] text-[#C8B1E4]/80 block">Aeterna can suggest people, places, and topics. You review everything before it is added.</span>
                   </div>
                 </div>
 
@@ -1098,7 +1093,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5 text-[#120B21]" />
-                      <span>Suggest tags</span>
+                      <span>Suggest details</span>
                     </>
                   )}
                 </button>
@@ -1241,13 +1236,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <div>
               <label className="block text-[#FFF2A8] font-semibold mb-1 flex items-center space-x-1.5">
                 <Users className="w-3.5 h-3.5 text-[#F5D77F]" />
-                <span>People Featured (comma separated)</span>
+                <span>Who is in this memory?</span>
+                <span className="text-[#C8B1E4]/60 font-normal">Optional</span>
               </label>
               <input
                 type="text"
                 value={people}
                 onChange={(e) => setPeople(e.target.value)}
-                placeholder="e.g. Wayne, Clara Pendelton, Grandfather Edward"
+                placeholder="Add names separated by commas"
                 className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium transition-all"
               />
             </div>
@@ -1261,10 +1257,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   </div>
                   <div>
                     <span className="font-cinzel font-bold text-[#FFF2A8] text-xs block">
-                      Record Spoken Voice Memory &amp; AI Transcribe
+                      Tell the story out loud
                     </span>
                     <span className="text-[10px] text-[#C8B1E4]/80 font-mono block">
-                      Record voice stories directly — transcribed automatically into written story text by Gemini AI
+                      Record a voice note and turn it into a written story.
                     </span>
                   </div>
                 </div>
@@ -1276,7 +1272,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5 cursor-pointer shadow"
                   >
                     <Mic className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                    <span>Record Voice</span>
+                    <span>Record story</span>
                   </button>
                 )}
               </div>
@@ -1358,21 +1354,27 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             {/* Story / Description */}
             <div>
               <label className="block text-[#FFF2A8] font-semibold mb-1">
-                {uploadMode === 'album' ? 'Shared Album Story / Transcribed Voice Context' : 'Story / Transcribed Voice Description'}
+                {uploadMode === 'album' ? 'What is the story of this album?' : 'What happened in this memory?'}
+                <span className="ml-1 text-[#C8B1E4]/60 font-normal">Optional</span>
               </label>
               <textarea
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={uploadMode === 'album' ? "Write down the backstory for this entire album, people present, emotions, or family history..." : "Write down details, people present, emotions, or family context..."}
+                placeholder={uploadMode === 'album' ? "Share the occasion, people, and moments you want your family to remember..." : "Share what happened, who was there, and why this moment matters..."}
                 className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] placeholder-[#C8B1E4]/40 focus:outline-none focus:border-[#F5D77F] font-medium transition-all"
               ></textarea>
             </div>
 
-            {/* Tags & Encryption Tier */}
+            <details className="group rounded-2xl border border-[#DFB260]/25 bg-[#120B21]/55 p-4">
+              <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-[#FFF2A8] font-semibold">
+                <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-300" /> Organization &amp; privacy options</span>
+                <span className="text-[10px] text-[#C8B1E4] font-normal">Optional · Your memory is private by default</span>
+              </summary>
+              <div className="mt-4 space-y-4 border-t border-[#DFB260]/15 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Shared Tags (comma separated)</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">Topics</label>
                 <input
                   type="text"
                   value={tags}
@@ -1382,25 +1384,27 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[#FFF2A8] font-semibold mb-1">Encryption Tier</label>
+                <label className="block text-[#FFF2A8] font-semibold mb-1">Privacy level</label>
                 <select
                   value={encryptionLevel}
                   onChange={(e: any) => setEncryptionLevel(e.target.value)}
                   className="w-full bg-[#120B21] border border-[#DFB260]/40 rounded-2xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F] font-medium transition-all"
                 >
-                  <option value="Standard" className="bg-[#120B21]">Standard Public</option>
-                  <option value="Vault Level 3" className="bg-[#120B21]">Vault Level 3 Encrypted</option>
-                  <option value="Level 5 Protected" className="bg-[#120B21]">Level 5 Protected</option>
-                  <option value="Quantum-Proof" className="bg-[#120B21]">Quantum-Proof Multi-sig</option>
+                  <option value="Standard" className="bg-[#120B21]">Public</option>
+                  <option value="Vault Level 3" className="bg-[#120B21]">Private</option>
+                  <option value="Level 5 Protected" className="bg-[#120B21]">Private · Extra protection</option>
+                  <option value="Quantum-Proof" className="bg-[#120B21]">Private · Maximum protection</option>
                 </select>
               </div>
             </div>
 
             <div className="rounded-2xl border border-[#DFB260]/30 bg-[#120B21] p-3">
-              <label className="block text-[#FFF2A8] font-semibold mb-1">Permanent Vault Master Passphrase</label>
-              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="One passphrase for every permanent archive" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
-              <p className="mt-2 text-[10px] text-[#C8B1E4]">Use the same master passphrase for every album and memory. It is retained only for this browser session; each file still receives its own random encryption key. Files without it remain private in R2.</p>
+              <label className="block text-[#FFF2A8] font-semibold mb-1">Also prepare for permanent archiving</label>
+              <input type="password" value={archivalPassphrase} onChange={event=>setArchivalPassphrase(event.target.value)} placeholder="Enter your Vault Security passphrase" className="w-full bg-[#090512] border border-[#DFB260]/40 rounded-xl p-3 text-[#FFF2A8] focus:outline-none focus:border-[#F5D77F]" />
+              <p className="mt-2 text-[10px] text-[#C8B1E4]">Optional. A passphrase of 12 or more characters prepares an encrypted permanent-archive copy. Without one, this memory still saves privately to your vault.</p>
             </div>
+              </div>
+            </details>
 
             {cloudActivity.transferring > 0 && (
               <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-amber-100 flex items-center gap-2">
@@ -1431,8 +1435,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 <Upload className="w-3.5 h-3.5" />
                 <span>
                   {uploadMode === 'album' 
-                    ? `Archive Album (${albumFiles.length || 1} ${albumFiles.length === 1 ? 'Item' : 'Items'})` 
-                    : 'Save Memory'}
+                    ? `Save album (${albumFiles.length || 1} ${albumFiles.length === 1 ? 'item' : 'items'})`
+                    : 'Save memory'}
                 </span>
               </button>
             </div>
