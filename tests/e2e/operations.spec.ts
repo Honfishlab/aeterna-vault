@@ -33,6 +33,25 @@ test("requires permanent Arweave storage for every new memory", async ({ page })
   await expect(page.getByRole("button", { name:"Save permanently" })).toBeEnabled();
 });
 
+test("secures ciphertext before uploading the private viewing copy", async ({ page }) => {
+  const calls:string[]=[];
+  await page.route("**/api/arweave/archive/presign",route=>{calls.push("archive-presign");return route.fulfill({contentType:"application/json",body:JSON.stringify({jobId:"archive-first",uploadUrl:"http://127.0.0.1:4173/archive-cipher"})});});
+  await page.route("**/archive-cipher",route=>{calls.push("archive-cipher");return route.fulfill({status:200});});
+  await page.route("**/api/arweave/archive/complete",route=>{calls.push("archive-complete");return route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,jobId:"archive-first",receipt:{jobId:"archive-first",payloadHash:"a".repeat(64),encryptedBytes:32,status:"queued",createdAt:new Date().toISOString(),receiptUrl:"/api/arweave/archive/receipt/archive-first"}})});});
+  await page.route("**/api/media/presign",route=>{calls.push("media-presign");return route.fulfill({contentType:"application/json",body:JSON.stringify({mediaId:"media-second",uploadUrl:"http://127.0.0.1:4173/media-plain"})});});
+  await page.route("**/media-plain",route=>{calls.push("media-plain");return route.fulfill({status:200});});
+  await page.route("**/api/media/complete",route=>{calls.push("media-complete");return route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,mediaId:"media-second",mediaUrl:"/api/media/media-second"})});});
+  await page.route("**/api/arweave/archive/link",route=>{calls.push("archive-link");return route.fulfill({contentType:"application/json",body:JSON.stringify({success:true,jobId:"archive-first",mediaId:"media-second"})});});
+  await page.goto("/#search");
+  await page.getByRole("button",{name:"Add memory"}).first().click();
+  await page.getByPlaceholder("e.g., Sunday afternoon with Grandma").fill("Ciphertext first memory");
+  await page.locator("input[type=file]").setInputFiles({name:"memory.jpg",mimeType:"image/jpeg",buffer:Buffer.from("family memory bytes")});
+  await page.getByPlaceholder("Unlock permanent encryption (12+ characters)").fill("family archive key");
+  await page.getByRole("button",{name:"Save permanently"}).click();
+  await expect(page.getByText("Queued for permanent storage")).toBeVisible({timeout:10000});
+  expect(calls).toEqual(["archive-presign","archive-cipher","archive-complete","media-presign","media-plain","media-complete","archive-link"]);
+});
+
 test("does not overwrite the server vault before hydration completes", async ({ page }) => {
   const syncBodies:any[]=[];
   const memory={id:"preserved-1",title:"Preserved server memory",category:"Family",date:"2026-08-01",description:"Must survive a slow reload.",encryptionLevel:"Level 5 Protected",tags:["preserved"]};

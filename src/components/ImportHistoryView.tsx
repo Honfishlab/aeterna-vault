@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Archive, Loader2, Lock, RefreshCw, X } from "lucide-react";
-import { MAX_PERMANENT_ARCHIVE_BYTES, queuePermanentArchive } from "../lib/permanentArchive";
+import { downloadPermanentArchiveReceipt, MAX_PERMANENT_ARCHIVE_BYTES, pendingPermanentArchiveHandoffs, queuePermanentArchive } from "../lib/permanentArchive";
 
 interface AuditRow {
   id: string;
@@ -16,6 +16,7 @@ interface AuditRow {
   status: string;
   processingStatus?: string | null;
   archiveStatus?: string | null;
+  archiveJobId?: string | null;
   arweaveId?: string | null;
   r2UploadedAt?: string | null;
   permanentArchiveDate?: string | null;
@@ -45,6 +46,7 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
   const [archiveError, setArchiveError] = useState("");
   const [archiving, setArchiving] = useState(false);
   const [archiveProgress, setArchiveProgress] = useState({ current: 0, total: 0, item: "", percent: 0 });
+  const [pendingHandoffs, setPendingHandoffs] = useState<ReturnType<typeof pendingPermanentArchiveHandoffs>>([]);
 
   const load = async () => {
     setLoading(true);
@@ -53,7 +55,7 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); setPendingHandoffs(pendingPermanentArchiveHandoffs()); }, []);
   useEffect(() => {
     if (!rows.some(row => ["queued","transferring"].includes(row.status) || ["queued","processing"].includes(row.processingStatus || "") || ["staging","queued","uploading","submitted"].includes(row.archiveStatus || ""))) return;
     const timer = window.setInterval(load, 5000);
@@ -107,6 +109,8 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
 
       {loadError && <div className="rounded-lg border border-rose-500/50 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{loadError}</div>}
 
+      {pendingHandoffs.length>0&&<section className="rounded-xl border border-amber-300/45 bg-amber-300/10 p-4"><h2 className="font-cinzel text-base text-[#FFF2A8]">Permanent originals secured · viewing-copy setup interrupted</h2><p className="mt-1 text-xs text-[#C8B1E4]">These encrypted originals are already queued independently of this browser. Their receipts preserve the hashes and job references needed for support or recovery.</p><div className="mt-3 flex flex-wrap gap-2">{pendingHandoffs.map(item=><button key={item.jobId} type="button" onClick={()=>downloadPermanentArchiveReceipt(item.jobId)} className="rounded-lg border border-[#F5D77F]/45 px-3 py-2 text-xs text-[#FFF2A8] hover:bg-[#F5D77F]/10">Download receipt · {item.name}</button>)}</div></section>}
+
       {archiveOpen && <section className="rounded-xl border border-[#DFB260]/45 bg-[#120821]/95 p-4 shadow-2xl">
         <div className="flex items-start justify-between gap-4"><div><h2 className="flex items-center gap-2 font-cinzel text-lg text-[#FFF2A8]"><Lock className="h-4 w-4" /> Finish older R2-only uploads</h2><p className="mt-1 text-xs text-[#C8B1E4]">New uploads archive automatically. These {archiveEligibleRows.length} files predate that behavior and can be encrypted now to complete permanent storage.</p></div><button aria-label="Close archive panel" onClick={() => setArchiveOpen(false)} disabled={archiving} className="text-[#C8B1E4] hover:text-white disabled:opacity-30"><X className="h-5 w-5" /></button></div>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row"><input type="password" value={archivePassphrase} onChange={event => setArchivePassphrase(event.target.value)} disabled={archiving} placeholder="Permanent-vault passphrase (12+ characters)" className="min-w-0 flex-1 rounded-lg border border-[#DFB260]/40 bg-[#080411] px-3 py-2.5 text-sm text-[#FFF2A8] outline-none focus:border-[#F5D77F]" /><button onClick={archiveR2Items} disabled={archiving || archivePassphrase.length < 12} className="gold-filled-btn flex items-center justify-center gap-2 px-5 py-2.5 text-xs disabled:opacity-30">{archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />} Encrypt &amp; queue all</button></div>
@@ -118,7 +122,7 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
         <table className="w-full min-w-[1480px] border-collapse text-left text-xs">
           <thead className="bg-[#1A0C33] text-[10px] uppercase tracking-wider text-[#F5D77F]">
             <tr>
-              {["Preview","File","R2 album","Arweave album","Type","Size","Status","Arweave ID","Upload to R2 date","Permanent archive date"].map(label => <th key={label} className="border-b border-r border-[#DFB260]/25 px-3 py-3 font-semibold last:border-r-0">{label}</th>)}
+              {["Preview","File","R2 album","Arweave album","Type","Size","Status","Receipt","Arweave ID","Upload to R2 date","Permanent archive date"].map(label => <th key={label} className="border-b border-r border-[#DFB260]/25 px-3 py-3 font-semibold last:border-r-0">{label}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -133,13 +137,14 @@ export function ImportHistoryView({ onOpenAlbum }: { onOpenAlbum?: (albumName: s
                 <td className="border-r border-[#DFB260]/15 px-3 py-2.5 font-mono text-[11px] text-[#C8B1E4]">{row.contentType || row.mimeType || "—"}</td>
                 <td className="whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5 font-mono text-[#C8B1E4]">{formatBytes(Number(row.bytesTotal || 0))}</td>
                 <td className={"whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5 font-semibold " + statusColor} title={row.error || row.processingError || status}>{status}</td>
+                <td className="whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5">{row.archiveJobId ? <button type="button" onClick={()=>downloadPermanentArchiveReceipt(String(row.archiveJobId))} className="text-[#F5D77F] hover:underline">Download receipt</button> : "—"}</td>
                 <td className="border-r border-[#DFB260]/15 px-3 py-2.5 font-mono text-[10px]">{row.arweaveId ? <a href={"https://arweave.net/" + row.arweaveId} target="_blank" rel="noreferrer" className="text-[#F5D77F] hover:underline" title={row.arweaveId}>{compactId(row.arweaveId)}</a> : "—"}</td>
                 <td className="whitespace-nowrap border-r border-[#DFB260]/15 px-3 py-2.5 text-[#C8B1E4]">{formatDate(row.r2UploadedAt)}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-[#C8B1E4]">{formatDate(row.permanentArchiveDate)}</td>
               </tr>;
             })}
-            {!loading && !rows.length && <tr><td colSpan={10} className="px-4 py-14 text-center text-[#C8B1E4]">No file operations have been recorded.</td></tr>}
-            {loading && !rows.length && <tr><td colSpan={10} className="px-4 py-14 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-[#F5D77F]" /></td></tr>}
+            {!loading && !rows.length && <tr><td colSpan={11} className="px-4 py-14 text-center text-[#C8B1E4]">No file operations have been recorded.</td></tr>}
+            {loading && !rows.length && <tr><td colSpan={11} className="px-4 py-14 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-[#F5D77F]" /></td></tr>}
           </tbody>
         </table>
       </div>

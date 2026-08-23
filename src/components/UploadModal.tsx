@@ -3,7 +3,7 @@ import { MemoryItem } from '../types';
 import { triggerGlobalArweaveAlert } from './NotificationSystem';
 import { compressImageFile } from '../lib/imageCompressor';
 import { uploadMediaFile } from '../lib/mediaUpload';
-import { queuePermanentArchive } from '../lib/permanentArchive';
+import { linkPermanentArchive, queuePermanentArchive } from '../lib/permanentArchive';
 import { getArchiveMasterPassphrase, setArchiveMasterPassphrase } from '../lib/archiveMasterSession';
 import { CloudImportModal, ImportedCloudMedia } from './CloudImportModal';
 import { BackgroundImportProgress, ImportActivitySummary } from './BackgroundImportProgress';
@@ -533,27 +533,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         let archiveStatus: MemoryItem["archiveStatus"] = "r2_only";
         let archiveError: string | undefined;
         if (selectedFile) {
-          setArchiveStatusText('Uploading original media to private Cloudflare R2 storage...');
-          const stored = await uploadMediaFile(selectedFile, progress => setArchiveProgress(5 + Math.round(progress * 0.25)));
+          setArchiveStatusText('Encrypting the permanent original before it leaves this device...');
+          const archive = await queuePermanentArchive(selectedFile, archivalPassphrase, value => setArchiveProgress(5 + Math.round(value * 0.45)));
+          archiveJobId = archive.jobId;
+          archiveStatus = 'queued';
+          setArchiveStep(2);
+          setArchiveStatusText('Permanent handoff secured. Preparing the private operational copy...');
+          const stored = await uploadMediaFile(selectedFile, progress => setArchiveProgress(50 + Math.round(progress * 0.35)));
           storedMediaUrl = stored?.mediaUrl || null;
           storedMediaId = stored?.mediaId;
         }
-        if (!storedMediaId) throw new Error('The operational upload could not be verified, so permanent storage was not started.');
-        setArchiveStatusText('Encrypting single memory payload...');
+        if (!storedMediaId) throw new Error('The permanent original is queued, but its private viewing copy could not be verified. Your archive receipt remains recoverable on this device.');
         const contentType = selectedFile ? selectedFile.type : 'image/jpeg';
-
-        setArchiveProgress(35);
-
-        if (selectedFile && storedMediaId) {
-          setArchiveStatusText('Encrypting and queueing permanent archive...');
-          try {
-            const archive = await queuePermanentArchive(selectedFile, archivalPassphrase, value => setArchiveProgress(35 + Math.round(value * 0.55)), storedMediaId);
-            archiveJobId = archive.jobId;
-            archiveStatus = 'queued';
-          } catch (error) {
-            throw new Error(error instanceof Error ? error.message : 'Permanent archive queueing failed.');
-          }
-        }
+        if (!archiveJobId) throw new Error('Permanent archive handoff was not created.');
+        setArchiveStatusText('Linking the private viewing copy to its permanent archive...');
+        await linkPermanentArchive(archiveJobId,storedMediaId);
         setArchiveProgress(90);
         setArchiveStep(3);
         setArchiveQueueResult({
@@ -619,10 +613,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           let archiveStatus: MemoryItem["archiveStatus"] = "r2_only";
           let archiveError: string | undefined;
           if (item.file) {
-            setArchiveStatusText(`Uploading album item ${idx + 1} of ${totalItems} to private Cloudflare R2 storage...`);
-            const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + progress / 100) / totalItems) * 80)), title);
+            setArchiveStatusText(`Encrypting permanent item ${idx + 1} of ${totalItems} before upload...`);
+            const archive=await queuePermanentArchive(item.file,archivalPassphrase,value=>setArchiveProgress(Math.round(((idx+value/200)/totalItems)*90)),undefined,title);
+            archiveJobId=archive.jobId;
+            archiveStatus="queued";
+            setArchiveStatusText(`Permanent handoff ${idx + 1} secured. Uploading its private viewing copy...`);
+            const stored = await uploadMediaFile(item.file, progress => setArchiveProgress(Math.round(((idx + 0.5 + progress / 200) / totalItems) * 90)), title);
             storedMediaUrl = stored?.mediaUrl || item.previewUrl;
             storedMediaId = stored?.mediaId;
+            if(!storedMediaId)throw new Error(`The operational copy for ${item.name} could not be verified.`);
+            await linkPermanentArchive(archiveJobId,storedMediaId,title);
           }
 
 
@@ -630,7 +630,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             ? title
             : `${title} (${idx + 1}/${totalItems}) - ${item.name.replace(/\.[^/.]+$/, "")}`;
 
-          if (storedMediaId) {
+          if (storedMediaId && !archiveJobId) {
             setArchiveStatusText(`Preparing permanent archive ${idx + 1} of ${totalItems}...`);
             try {
               let archiveFile=item.file;
@@ -1486,7 +1486,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <p className="text-xs text-[#C8B1E4]/80 mt-1 font-medium">
               {archiveProgress === 100
                 ? (uploadMode === 'album' ? `Find them in Memories → Albums → ${title}.` : 'Find it at the top of Memories under All memories.')
-                : (archiveStatusText || 'Uploading the operational copy, encrypting it, and queueing permanent Arweave storage.')}
+                : (archiveStatusText || 'Encrypting and securing the permanent original before preparing its private viewing copy.')}
             </p>
           </div>
 
@@ -1508,11 +1508,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <div className="bg-[#120B21]/80 p-4 rounded-2xl border border-[#DFB260]/30 text-left text-xs space-y-2.5 font-sans">
             <div className={`flex items-center space-x-2 ${archiveStep >= 1 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <CheckCircle2 className="w-4 h-4 text-[#F5D77F]" />
-              <span>Private R2 operational upload prepared</span>
+              <span>Permanent original encryption started</span>
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 2 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <HardDrive className="w-4 h-4 text-[#F5D77F]" />
-              <span>{archiveStep >= 2 ? '✓' : '•'} Encrypting the permanent archive in this browser</span>
+              <span>{archiveStep >= 2 ? '✓ Permanent handoff secured' : '• Staging encrypted ciphertext for the archive worker'}</span>
             </div>
             <div className={`flex items-center space-x-2 ${archiveStep >= 3 ? 'text-[#FFF2A8] font-semibold' : 'text-[#C8B1E4]/60'}`}>
               <ShieldCheck className="w-4 h-4 text-[#F5D77F]" />
@@ -1520,7 +1520,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           </div>
 
-          {archiveProgress === 100 ? <div className="rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-4 text-left text-xs"><p className="font-bold text-[#FFF2A8]">What happens next?</p><p className="mt-2 leading-5 text-[#C8B1E4]">{archiveQueueResult.queued} {archiveQueueResult.queued === 1 ? 'file is' : 'files are'} encrypted and queued for Arweave. You can use the files from Memories now; confirmation progress appears automatically in Vault Security.</p></div> : <div className="text-[11px] text-[#FFF2A8] bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">Keep this window open until every file has been encrypted and queued. Arweave confirmation continues automatically afterward.</div>}
+          {archiveProgress === 100 ? <div className="rounded-2xl border border-[#DFB260]/25 bg-[#120B21] p-4 text-left text-xs"><p className="font-bold text-[#FFF2A8]">What happens next?</p><p className="mt-2 leading-5 text-[#C8B1E4]">{archiveQueueResult.queued} {archiveQueueResult.queued === 1 ? 'file is' : 'files are'} encrypted and queued for Arweave. You can close Aeterna now; submission, retry, confirmation, and receipt updates continue on the server.</p></div> : <div className="text-[11px] text-[#FFF2A8] bg-[#120B21] p-2.5 rounded-xl border border-[#DFB260]/30">Keep this window open only until the encrypted handoff is secured. After that, Arweave processing is independent of this browser.</div>}
 
           {archiveProgress < 100 ? (
             <button
