@@ -2,7 +2,7 @@
 
 ## Architecture
 
-R2 remains the private operational store for originals, thumbnails, playback variants, recovery, and staging. The permanent-storage path creates a separate AES-256-GCM ciphertext in the browser. Only that ciphertext is staged and submitted to Arweave.
+R2 remains the private operational store for viewing copies, thumbnails, playback variants, recovery, and staging. For local uploads, the permanent-storage path now creates and queues an AES-256-GCM ciphertext before the secondary operational copy is uploaded. Only ciphertext is placed in the archive staging prefix or submitted to Arweave.
 
 The initial mainnet path uses an application-funded service wallet. Confirmed payloads must match through both `ARWEAVE_GATEWAY_URL` (default `https://arweave.net`) and `ARWEAVE_SECONDARY_GATEWAY_URL` (default `https://ardrive.net`). User JWK files are never uploaded or stored. `ARWEAVE_WALLET_JWK` must contain the service JWK JSON or its base64 encoding and must exist only in Render secret storage.
 
@@ -20,7 +20,9 @@ Never use a production family file for the first transaction. Arweave data is pe
 
 ## Direct-upload boundary
 
-Encrypted payloads up to 100 MB use the Arweave SDK chunk uploader. Ciphertext moves from the browser to a signed R2 staging URL and then streams through the archive worker; media bytes never travel in JSON request bodies.
+Encrypted payloads up to 100 MB use the Arweave SDK chunk uploader. Ciphertext moves from the browser to a signed R2 staging URL and then through the archive worker; media bytes never travel in JSON request bodies. Once `/api/arweave/archive/complete` returns a receipt, submission, retry, and confirmation no longer depend on the browser remaining open. `/api/arweave/archive/link` subsequently associates the permanent handoff with the secondary private viewing copy.
+
+Every queued job exposes an authenticated JSON receipt at `/api/arweave/archive/receipt/:jobId`. The receipt contains the immutable ciphertext SHA-256, byte size, encryption algorithm, job identifier, current state, and—after submission—the Arweave transaction and gateway reference. If viewing-copy setup is interrupted after permanent handoff, the browser retains only this non-secret receipt reference for recovery.
 
 ## Transaction tags
 

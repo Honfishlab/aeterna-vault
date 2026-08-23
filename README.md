@@ -74,6 +74,8 @@ Google Photos and Google Drive videos are imported by the background worker rath
 
 Imports support files up to 100 MB so every accepted original can continue through browser encryption and permanent Arweave storage. The progress panel shows transferred bytes, estimated time remaining, cancellation, retry, and the saved resume position. Completed entries retain original size, width, height, duration, capture time, and source provider when supplied by Google.
 
+For local uploads, Aeterna stages the browser-encrypted permanent original first. The returned archive receipt is the durable handoff: the Arweave worker can submit, retry, verify, and confirm it after the browser closes. The private R2 viewing copy is uploaded second and linked to that archive job. Activity & Archive Status provides downloadable JSON receipts containing the ciphertext hash and eventual transaction reference.
+
 The `006_video_metadata_and_resumable_imports` migration adds the metadata, thumbnail, and multipart-checkpoint columns. Render applies it through the existing `npm run db:migrate` pre-deploy command. Multipart checkpoints and pending media are retained for 24 hours so deployments and temporary provider failures can recover.
 
 ### Deployment verification
